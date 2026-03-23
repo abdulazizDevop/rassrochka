@@ -96,7 +96,7 @@ function LabeledSelect({
 }
 
 export default function ContractsPage() {
-  const { contracts, deleteContract, updateContract, currentUser, clients } = useApp();
+  const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry } = useApp();
   const isViewer = currentUser?.role === 'viewer';
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -151,7 +151,22 @@ export default function ContractsPage() {
   };
 
   const handlePay = (c: Contract) => {
-    updateContract(c.id, { paymentStatus: 'Оплачено', remainingDebt: Math.max(0, c.remainingDebt - c.monthlyPayment) });
+    const payment = c.monthlyPayment;
+    const newDebt = Math.max(0, c.remainingDebt - payment);
+    const isPaid = newDebt === 0;
+    updateContract(c.id, {
+      paymentStatus: 'Оплачено',
+      remainingDebt: newDebt,
+      ...(isPaid ? { status: 'Погашен' } : {}),
+    });
+    // Add payment to account balance + ledger
+    depositAccount('cash', payment, `Платеж по договору ${c.clientName} (#${c.number}) · ${c.product}`);
+    addAuditEntry({
+      action: 'Создание',
+      section: 'Платежи',
+      entity: `Платёж ${payment.toLocaleString('ru-RU')} ₽`,
+      details: `Договор #${c.number} (${c.clientName}) · ${c.product}`,
+    });
   };
 
   const renderStatus = (c: Contract) => {

@@ -12,7 +12,7 @@ const ACCOUNTS = ['общий (Доступно: 3 945 563 ₽)'];
 
 export default function CreateContractPage() {
   const router = useRouter();
-  const { clients, products, addContract, addClient, contracts, currentUser } = useApp();
+  const { clients, products, addContract, addClient, contracts, currentUser, depositAccount, addAuditEntry } = useApp();
   const isViewer = currentUser?.role === 'viewer';
 
   if (isViewer) {
@@ -147,6 +147,16 @@ export default function CreateContractPage() {
       approved: false,
     };
     addContract(newContract);
+    // Process first payment if any
+    if (firstPaymentNum > 0) {
+      depositAccount('cash', firstPaymentNum, `Первый взнос по договору ${newContract.clientName} (#${newContract.number}) · ${productName}`);
+      addAuditEntry({
+        action: 'Создание',
+        section: 'Платежи',
+        entity: `Первый взнос ${firstPaymentNum.toLocaleString('ru-RU')} ₽`,
+        details: `Договор #${newContract.number} (${newContract.clientName}) · ${productName}`,
+      });
+    }
     router.push('/dashboard/contracts');
   };
 
