@@ -180,7 +180,7 @@ export default function ContractsPage() {
   const today = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Управление договорами</h1>
         <p className="text-sm text-gray-500 mt-1">Фильтруйте, просматривайте и управляйте договорами</p>

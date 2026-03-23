@@ -422,13 +422,13 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Управление клиентами</h1>
         <p className="text-sm text-gray-500 mt-1">Наведите на имя клиента для просмотра фото паспорта</p>
       </div>
 
-      <div className="mb-5 max-w-sm">
+      <div className="mb-5 max-w-full sm:max-w-sm">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}

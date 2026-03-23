@@ -70,14 +70,14 @@ export default function AuditPage() {
   const todayStr = `${String(today.getDate()).padStart(2,'0')}.${String(today.getMonth()+1).padStart(2,'0')}.${today.getFullYear()}`;
 
   return (
-    <div className="p-8 max-w-7xl">
+    <div className="p-4 md:p-8 max-w-7xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">История действий сотрудников</h1>
       <p className="text-sm text-gray-400 mb-8">Просматривайте все действия сотрудников в системе</p>
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-100 p-6 mb-6">
         <div className="font-semibold text-gray-700 mb-4">Фильтры</div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1.5">Период с</label>
             <input
@@ -126,7 +126,7 @@ export default function AuditPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         {filtered.length === 0 ? (
           <div className="p-12 text-center text-gray-400 text-sm">
             {auditLog.length === 0

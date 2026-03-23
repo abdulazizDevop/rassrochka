@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import Sidebar from '@/components/Sidebar';
+import { Menu } from 'lucide-react';
 
 interface DiskInfo {
   freeGB: number | null;
@@ -16,6 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [disk, setDisk] = useState<DiskInfo | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (hydrated && !isLoggedIn) {
@@ -37,10 +39,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-[#f3f4f6]">
-      <Sidebar />
-      <main className="flex-1 overflow-auto">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <main className="flex-1 overflow-auto min-w-0">
+        {/* Mobile header */}
+        <div className="sticky top-0 z-30 flex items-center gap-3 bg-white border-b border-gray-100 px-4 py-3 md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition"
+          >
+            <Menu size={22} className="text-gray-700" />
+          </button>
+          <svg width="24" height="22" viewBox="0 0 60 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 4L2 52H16L20 40H40L44 52H58L36 4H24Z" fill="#5B5BD6"/>
+            <path d="M30 14L36 34H24L30 14Z" fill="white"/>
+          </svg>
+          <span className="text-lg font-bold text-[#5B5BD6]">AkhmadPay</span>
+        </div>
+
         {showWarning && disk && (
-          <div className="sticky top-0 z-50 flex items-center gap-3 bg-amber-500 text-white px-5 py-3 shadow-lg animate-pulse-once">
+          <div className="sticky top-0 md:top-0 z-20 flex items-center gap-3 bg-amber-500 text-white px-5 py-3 shadow-lg animate-pulse-once">
             <svg className="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>

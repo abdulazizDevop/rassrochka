@@ -230,8 +230,8 @@ export default function InvestmentsPage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8 max-w-6xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Управление инвесторами</h1>
           <p className="text-sm text-gray-500 mt-1">Ищите, просматривайте и управляйте партнёрами и пулами</p>
@@ -268,7 +268,7 @@ export default function InvestmentsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Поиск по имени или телефону..."
-            className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm w-80 mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm w-full sm:w-80 mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
           />
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <table className="w-full text-sm">

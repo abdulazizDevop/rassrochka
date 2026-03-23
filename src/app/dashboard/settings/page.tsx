@@ -311,7 +311,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-4 md:p-6 max-w-5xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Настройки приложения</h1>
       <p className="text-sm text-gray-500 mb-6">Управляйте настройками приложения и тарифами</p>
 
@@ -337,7 +337,7 @@ export default function SettingsPage() {
 
       {/* General */}
       {tab === 'general' && (
-        <div className="flex gap-6 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 flex-wrap">
           <div className="flex-1 min-w-80 bg-white rounded-xl border border-gray-100 p-6">
             <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
               <DollarSign size={16} className="text-gray-500" />
@@ -479,7 +479,7 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-gray-500 mb-4">В вашем документе Word используйте переменные в фигурных скобках, например: {'{fio}'}</p>
             <p className="text-sm text-gray-600 mb-3">Список всех доступных переменных:</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {TEMPLATE_VARS.map(([varName, desc]) => (
                 <div key={varName} className="flex items-start gap-3 border-l-2 border-gray-100 pl-3 py-2">
                   <code className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded font-mono whitespace-nowrap shrink-0">{varName}</code>

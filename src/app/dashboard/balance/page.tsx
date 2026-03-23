@@ -135,7 +135,7 @@ export default function BalancePage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl">
+    <div className="p-4 md:p-8 max-w-7xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Баланс</h1>
         <p className="text-gray-500 text-sm mt-1">Управление счетами и история операций</p>
@@ -165,7 +165,7 @@ export default function BalancePage() {
       {/* === СЧЕТА TAB === */}
       {tab === 'accounts' && (
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <p className="text-sm text-gray-500">
               {new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
@@ -180,7 +180,7 @@ export default function BalancePage() {
           </div>
 
             {/* Top cards */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="bg-indigo-600 rounded-2xl p-6 text-white relative overflow-hidden cursor-pointer transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.03] hover:shadow-2xl hover:shadow-indigo-400/40">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-indigo-200 text-sm">Общий капитал</p>
@@ -188,7 +188,7 @@ export default function BalancePage() {
                     <ArrowRightLeft size={16} className="text-white" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold">{fmt(totalBalance)}</p>
+                <p className="text-2xl md:text-3xl font-bold">{fmt(totalBalance)}</p>
                 <div className="absolute -bottom-6 -right-6 w-32 h-32 rounded-full bg-white/10" />
                 <div className="absolute -bottom-10 -right-10 w-44 h-44 rounded-full bg-white/5" />
               </div>
@@ -199,7 +199,7 @@ export default function BalancePage() {
                     <Wallet size={16} className="text-indigo-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-indigo-600">{fmt(cashAccount?.balance ?? 0)}</p>
+                <p className="text-2xl md:text-3xl font-bold text-indigo-600">{fmt(cashAccount?.balance ?? 0)}</p>
                 <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-indigo-50/50" />
               </div>
               <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm relative overflow-hidden cursor-pointer transition-all duration-300 ease-out hover:-translate-y-2 hover:scale-[1.03] hover:shadow-2xl hover:shadow-indigo-200/60">
@@ -209,14 +209,14 @@ export default function BalancePage() {
                     <CreditCard size={16} className="text-indigo-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-indigo-600">{fmt(bankAccount?.balance ?? 0)}</p>
+                <p className="text-2xl md:text-3xl font-bold text-indigo-600">{fmt(bankAccount?.balance ?? 0)}</p>
                 <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-indigo-50/50" />
               </div>
             </div>
 
           {/* Account list + right panel */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <h2 className="font-semibold text-gray-800 mb-5">Счета</h2>
                 <div className="space-y-4">
@@ -301,7 +301,7 @@ export default function BalancePage() {
         </div>
       )}
       {tab === 'operations' && !isViewer && (
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Пополнение */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="font-semibold text-gray-800 mb-5">Пополнение счета</h2>
@@ -412,8 +412,8 @@ export default function BalancePage() {
         <div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
             <p className="text-sm text-gray-500 mb-2">Выберите счет для просмотра истории</p>
-            <div className="flex items-center gap-4">
-              <div className="relative w-72">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="relative w-full sm:w-72">
                 <select value={ledgerAccountId} onChange={e => setLedgerAccountId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 pr-8 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-400">
                   <option value="all">Все счета</option>
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

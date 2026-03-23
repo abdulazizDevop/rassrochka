@@ -547,7 +547,7 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-4 md:p-8 max-w-6xl">
       <>
       <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Аналитика</h1>
@@ -603,7 +603,7 @@ export default function AnalyticsPage() {
       </motion.div>
 
       {/* Row 1: Income / Expenses / Profit */}
-      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-3 gap-4 mb-4">
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
         {/* Income */}
         <motion.div variants={cardVariants}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 relative overflow-hidden"
@@ -679,7 +679,7 @@ export default function AnalyticsPage() {
       </motion.div>
 
       {/* Row 2 */}
-      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-4 gap-4 mb-4">
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {/* Contracts */}
         <motion.div variants={cardVariants}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
@@ -819,7 +819,7 @@ export default function AnalyticsPage() {
       </motion.div>
 
       {/* Row 3 */}
-      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-4 gap-4 mb-6">
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Products */}
         <motion.div variants={cardVariants}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
@@ -926,7 +926,7 @@ export default function AnalyticsPage() {
       </motion.div>
 
         {/* ─── Блок: Лучшие месяцы + Рассрочка + Топ товаров ─── */}
-        <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-3 gap-4 mb-4">
+        <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
 
           {/* Лучшие месяцы */}
           <motion.div variants={cardVariants}
@@ -1098,7 +1098,7 @@ export default function AnalyticsPage() {
           {/* 3D Charts */}
         <motion.div
           variants={containerVariants} initial="hidden" animate="show"
-          className="grid grid-cols-2 gap-4 mb-4"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"
         >
         {/* Income 3D bar */}
         <motion.div variants={cardVariants}
