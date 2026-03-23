@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: akhmadpay
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - app_data:/app/data
+      - app_uploads:/app/public/uploads
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  app_data:
+  app_uploads:
