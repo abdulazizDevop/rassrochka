@@ -1,6 +1,6 @@
 import { Contract, Client } from './types';
 
-export async function downloadContractPdf(contract: Contract, client: Client | undefined, companyName = 'Bestpay') {
+export async function downloadContractPdf(contract: Contract, client: Client | undefined, companyName = 'AkhmadPay') {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 

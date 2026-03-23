@@ -40,7 +40,7 @@ export default function LoginPage() {
             <line x1="18" y1="0" x2="46" y2="56" stroke="white" strokeWidth="5"/>
           </g>
         </svg>
-        <span className="text-3xl font-bold text-[#5B5BD6]">BestPay</span>
+        <span className="text-3xl font-bold text-[#5B5BD6]">AkhmadPay</span>
       </div>
 
       {/* Card */}

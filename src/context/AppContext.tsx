@@ -89,7 +89,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     daysUntilOverdue: 4,
     enableSecurityDepartment: false,
     printFormat: 'A4',
-    companyName: 'Bestpay',
+    companyName: 'AkhmadPay',
   });
   const [tariffs, setTariffs] = useState<Tariff[]>([
     { id: '1', name: 'стандарт', markup: 0, isDefault: true },
