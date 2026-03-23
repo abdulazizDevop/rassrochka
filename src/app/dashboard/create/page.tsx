@@ -3,7 +3,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Client } from '@/lib/types';
-import { ChevronDown, Download, Plus, Trash2, Search, Calculator, Camera, X, ZoomIn, FileText, FileSpreadsheet } from 'lucide-react';
+import { ChevronDown, Download, Plus, Trash2, Search, Calculator, Camera, X, ZoomIn, FileText, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
 const TARIFFS = ['стандарт', 'премиум', 'эконом'];
@@ -50,6 +50,7 @@ export default function CreateContractPage() {
   const [photoLightbox, setPhotoLightbox] = useState<number | null>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [alertMsg, setAlertMsg] = useState('');
 
   const costNum = parseFloat(cost) || 0;
   const firstPaymentNum = parseFloat(firstPayment) || 0;
@@ -116,7 +117,7 @@ export default function CreateContractPage() {
 
   const handleSubmit = () => {
     if (!selectedClient || !productName || !cost) {
-      alert('Заполните все обязательные поля');
+      setAlertMsg('Заполните все обязательные поля');
       return;
     }
     const newContract = {
@@ -506,7 +507,7 @@ export default function CreateContractPage() {
               <div className="flex gap-2 mt-5">
                 <button
                   onClick={async () => {
-                    if (!selectedClient || !productName || !cost) { alert('Заполните все поля'); return; }
+                    if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
                     const draftContract = {
                       id: 'draft', number: contracts.length + 1, createdAt: startDate,
                       endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
@@ -523,7 +524,7 @@ export default function CreateContractPage() {
                 </button>
                 <button
                   onClick={() => {
-                    if (!selectedClient || !productName || !cost) { alert('Заполните все поля'); return; }
+                    if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
                     const draftContract = {
                       id: 'draft', number: contracts.length + 1, createdAt: startDate,
                       endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
@@ -577,6 +578,26 @@ export default function CreateContractPage() {
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {alertMsg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAlertMsg('')}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle size={20} className="text-amber-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Внимание</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">{alertMsg}</p>
+            <div className="flex justify-end">
+              <button onClick={() => setAlertMsg('')}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#5B5BD6] rounded-lg hover:bg-[#4a4ac4] transition">
+                Понятно
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

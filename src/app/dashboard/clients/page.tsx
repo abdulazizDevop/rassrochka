@@ -2,22 +2,28 @@
 import { useState, useMemo, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Client } from '@/lib/types';
-import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
+import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil } from 'lucide-react';
 
 // ── Passport hover preview ──────────────────────────────────────────────────
-function PassportPreview({ photos }: { photos: string[] }) {
+function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: React.RefObject<HTMLSpanElement | null> }) {
   const [idx, setIdx] = useState(0);
+  const rect = anchorRef.current?.getBoundingClientRect();
+  const style: React.CSSProperties = rect ? {
+    position: 'fixed', zIndex: 50,
+    left: rect.left, top: rect.top - 8,
+    transform: 'translateY(-100%)',
+  } : { position: 'absolute', zIndex: 50, bottom: '100%', left: 0 };
+
   if (!photos || photos.length === 0) {
     return (
-      <div className="absolute z-50 bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-56 text-center">
+      <div style={style} className="bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-56 text-center">
         <div className="text-gray-300 text-4xl mb-2">📄</div>
         <p className="text-xs text-gray-400">Фото паспорта не загружено</p>
-        <div className="absolute bottom-[-6px] left-6 w-3 h-3 bg-white border-r border-b border-gray-200 rotate-45" />
       </div>
     );
   }
   return (
-    <div className="absolute z-50 bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden w-64">
+    <div style={style} className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden w-64">
       <div className="relative">
         <img src={photos[idx]} alt={`Паспорт ${idx + 1}`} className="w-full h-44 object-cover" />
         {photos.length > 1 && (
@@ -41,7 +47,75 @@ function PassportPreview({ photos }: { photos: string[] }) {
         )}
       </div>
       <p className="text-xs text-gray-500 text-center py-2">Фото паспорта</p>
-      <div className="absolute bottom-[-6px] left-6 w-3 h-3 bg-white border-r border-b border-gray-200 rotate-45" />
+    </div>
+  );
+}
+
+// ── Edit client modal ────────────────────────────────────────────────────────
+function EditClientModal({ client, onClose, onSave }: {
+  client: Client;
+  onClose: () => void;
+  onSave: (id: string, updates: Partial<Client>) => void;
+}) {
+  const [firstName, setFirstName] = useState(client.firstName);
+  const [lastName, setLastName] = useState(client.lastName);
+  const [middleName, setMiddleName] = useState(client.middleName);
+  const [phone, setPhone] = useState(client.phone);
+  const [address, setAddress] = useState(client.address ?? '');
+
+  const handleSubmit = () => {
+    if (!firstName.trim() || !phone.trim()) return;
+    onSave(client.id, { firstName: firstName.trim(), lastName: lastName.trim(), middleName: middleName.trim(), phone: phone.trim(), address: address.trim() || undefined });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full bg-[#EEF0FF] flex items-center justify-center">
+            <Pencil size={18} className="text-[#5B5BD6]" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">Редактировать клиента</h3>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Фамилия</label>
+            <input value={lastName} onChange={e => setLastName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Имя <span className="text-red-400">*</span></label>
+            <input value={firstName} onChange={e => setFirstName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Отчество</label>
+            <input value={middleName} onChange={e => setMiddleName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Телефон <span className="text-red-400">*</span></label>
+            <input value={phone} onChange={e => setPhone(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Адрес</label>
+            <input value={address} onChange={e => setAddress(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end mt-6">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+            Отмена
+          </button>
+          <button onClick={handleSubmit}
+            className="px-4 py-2 text-sm font-medium text-white bg-[#5B5BD6] rounded-lg hover:bg-[#4a4ac4] transition">
+            Сохранить
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -188,21 +262,26 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
 }
 
 // ── Row with hover preview ──────────────────────────────────────────────────
-function ClientRow({ client, isViewer, onManagePhotos, onDelete }: {
+function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit }: {
   client: Client;
   isViewer: boolean;
   onManagePhotos: (c: Client) => void;
   onDelete: (id: string) => void;
+  onEdit: (c: Client) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const nameRef = useRef<HTMLSpanElement>(null);
   const fullName = `${client.lastName} ${client.firstName} ${client.middleName}`.trim() || `${client.firstName} ${client.middleName}`.trim();
 
   return (
+    <>
     <tr className="border-b border-gray-50 hover:bg-gray-50">
       {/* ФИО with passport preview */}
       <td className="px-4 py-3">
         <div className="relative inline-block">
           <span
+            ref={nameRef}
             className="font-medium text-[#5B5BD6] cursor-pointer underline decoration-dotted underline-offset-2"
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
@@ -210,7 +289,7 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete }: {
           >
             {fullName}
           </span>
-          {hovered && <PassportPreview photos={client.passportPhotos ?? []} />}
+          {hovered && <PassportPreview photos={client.passportPhotos ?? []} anchorRef={nameRef} />}
         </div>
       </td>
       <td className="px-4 py-3 text-gray-700">{client.phone}</td>
@@ -218,7 +297,15 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete }: {
       <td className="px-4 py-3 text-gray-700">{client.contractsCount}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          {/* Passport photos button */}
+          {!isViewer && (
+            <button
+              onClick={() => onEdit(client)}
+              title="Редактировать"
+              className="bg-[#EEF0FF] text-[#5B5BD6] hover:bg-[#dddeff] rounded-lg p-2 transition"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
           <button
             onClick={() => onManagePhotos(client)}
             title="Фото паспорта"
@@ -230,7 +317,7 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete }: {
           </button>
           {!isViewer && (
             <button
-              onClick={() => { if (confirm('Удалить клиента?')) onDelete(client.id); }}
+              onClick={() => setShowDeleteModal(true)}
               className="bg-red-500 hover:bg-red-600 text-white rounded-lg p-2 transition"
             >
               <Trash2 size={14} />
@@ -239,6 +326,32 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete }: {
         </div>
       </td>
     </tr>
+    {showDeleteModal && (
+      <tr><td colSpan={5} className="p-0 border-none">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowDeleteModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Удалить клиента?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">Клиент <strong>{fullName}</strong> будет удалён навсегда.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                Отмена
+              </button>
+              <button onClick={() => { onDelete(client.id); setShowDeleteModal(false); }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition">
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      </td></tr>
+    )}
+    </>
   );
 }
 
@@ -248,6 +361,7 @@ export default function ClientsPage() {
   const isViewer = currentUser?.role === 'viewer';
   const [search, setSearch] = useState('');
   const [passportClient, setPassportClient] = useState<Client | null>(null);
+  const [editClient, setEditClient] = useState<Client | null>(null);
 
   const filtered = useMemo(() => {
     if (!search) return clients;
@@ -299,6 +413,7 @@ export default function ClientsPage() {
                 isViewer={isViewer}
                 onManagePhotos={setPassportClient}
                 onDelete={deleteClient}
+                onEdit={setEditClient}
               />
             ))}
             {filtered.length === 0 && (
@@ -316,6 +431,14 @@ export default function ClientsPage() {
           onClose={() => setPassportClient(null)}
           onSave={handleSavePhotos}
           isViewer={isViewer}
+        />
+      )}
+
+      {editClient && (
+        <EditClientModal
+          client={editClient}
+          onClose={() => setEditClient(null)}
+          onSave={(id, updates) => { updateClient(id, updates); setEditClient(null); }}
         />
       )}
     </div>

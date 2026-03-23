@@ -34,6 +34,13 @@ const DEFAULT_COLUMNS: Column[] = [
   { key: 'paymentStatus', label: 'Статус платежа', visible: true },
 ];
 
+function formatDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return digits.slice(0, 2) + '.' + digits.slice(2);
+  return digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+}
+
 function parseRuDate(s: string): Date | null {
   const parts = s.split('.');
   if (parts.length !== 3) return null;
@@ -101,6 +108,7 @@ export default function ContractsPage() {
   const [columns, setColumns] = useState<Column[]>(DEFAULT_COLUMNS);
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortAsc, setSortAsc] = useState(true);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const colRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -188,10 +196,10 @@ export default function ContractsPage() {
         </div>
 
         <span className="text-sm text-gray-600">С</span>
-        <input type="text" placeholder={today} value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+        <input type="text" placeholder={today} value={dateFrom} onChange={e => setDateFrom(formatDateInput(e.target.value))} maxLength={10}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 outline-none focus:border-[#5B5BD6] text-gray-500 placeholder:text-gray-300" />
         <span className="text-sm text-gray-600">До</span>
-        <input type="text" placeholder={today} value={dateTo} onChange={e => setDateTo(e.target.value)}
+        <input type="text" placeholder={today} value={dateTo} onChange={e => setDateTo(formatDateInput(e.target.value))} maxLength={10}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 outline-none focus:border-[#5B5BD6] text-gray-500 placeholder:text-gray-300" />
 
         <LabeledSelect label="Статусы" value={statusFilter} options={STATUSES} onChange={setStatusFilter} />
@@ -269,7 +277,7 @@ export default function ContractsPage() {
                           <FileSpreadsheet size={16} />
                         </button>
                       {!isViewer && (
-                        <button onClick={() => { if (confirm('Удалить договор?')) deleteContract(c.id); }}
+                        <button onClick={() => setDeleteId(c.id)}
                           className="text-gray-400 hover:text-red-500 transition">
                           <Trash2 size={16} />
                         </button>
@@ -284,6 +292,30 @@ export default function ContractsPage() {
           </tbody>
         </table>
       </div>
+
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Удалить договор?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">Это действие нельзя отменить. Договор будет удалён навсегда.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteId(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                Отмена
+              </button>
+              <button onClick={() => { deleteContract(deleteId); setDeleteId(null); }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition">
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

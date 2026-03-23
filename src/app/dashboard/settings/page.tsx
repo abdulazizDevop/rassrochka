@@ -134,10 +134,12 @@ export default function SettingsPage() {
   };
 
   const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('Удалить шаблон?')) return;
     await fetch(`/api/templates?id=${id}`, { method: 'DELETE' });
     setTemplates(prev => prev.filter(t => t.id !== id));
+    setDeleteTemplateId(null);
   };
+
+  const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
 
   const [newTariffName, setNewTariffName] = useState('');
   const [newTariffMarkup, setNewTariffMarkup] = useState(0);
@@ -366,7 +368,7 @@ export default function SettingsPage() {
                       <Download size={15} />
                     </a>
                     {isAdmin && (
-                      <button onClick={() => handleDeleteTemplate(t.id)}
+                      <button onClick={() => setDeleteTemplateId(t.id)}
                         className="text-gray-400 hover:text-red-500 transition p-1.5 rounded-lg hover:bg-red-50" title="Удалить">
                         <Trash2 size={15} />
                       </button>
@@ -612,6 +614,30 @@ export default function SettingsPage() {
             <Check size={16} />
             {saved ? 'Сохранено!' : 'Сохранить настройки'}
           </button>
+        </div>
+      )}
+
+      {deleteTemplateId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTemplateId(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Удалить шаблон?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">Шаблон будет удалён навсегда. Это действие нельзя отменить.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteTemplateId(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                Отмена
+              </button>
+              <button onClick={() => handleDeleteTemplate(deleteTemplateId)}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition">
+                Удалить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 'use client';
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Contract, Client, Product, Account, Transfer, LedgerEntry, Investor, InvestPool, AuditLogEntry, AppSettings, Tariff, BackupEntry, UserAccount, UserRole } from '@/lib/types';
 import { MOCK_CONTRACTS, MOCK_CLIENTS, MOCK_PRODUCTS, MOCK_ACCOUNTS, MOCK_LEDGER, MOCK_INVESTORS, MOCK_INVEST_POOLS } from '@/lib/data';
 
@@ -68,17 +68,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ledger, setLedger] = useState<LedgerEntry[]>(MOCK_LEDGER);
   const [investors, setInvestors] = useState<Investor[]>(MOCK_INVESTORS);
   const [investPools] = useState<InvestPool[]>(MOCK_INVEST_POOLS);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('bp_session') === '1';
-  });
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const s = localStorage.getItem('bp_user');
-      return s ? JSON.parse(s) as UserAccount : null;
-    } catch { return null; }
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const session = localStorage.getItem('bp_session') === '1';
+    if (session) {
+      setIsLoggedIn(true);
+      try {
+        const s = localStorage.getItem('bp_user');
+        if (s) setCurrentUser(JSON.parse(s) as UserAccount);
+      } catch { /* ignore */ }
+    }
+  }, []);
     const [users, setUsers] = useState<UserAccount[]>([]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
