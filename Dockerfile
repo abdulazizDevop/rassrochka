@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM dockerhub.timeweb.cloud/library/node:20-alpine AS base
 
 # --- Dependencies ---
 FROM base AS deps
@@ -34,5 +34,8 @@ RUN mkdir -p data public/uploads && chown -R nextjs:nodejs data public/uploads
 
 USER nextjs
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/api/data').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]
