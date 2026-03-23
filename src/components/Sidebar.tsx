@@ -52,12 +52,14 @@ export default function Sidebar() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-2">
           {navItems.map(({ href, label, icon: Icon }) => {
-            // Hide certain routes for viewers
+            // Viewers only see: contracts, security, clients, analytics
             if (isViewer && (
               href === '/dashboard/create' ||
+              href === '/dashboard/balance' ||
+              href === '/dashboard/investments' ||
               href === '/dashboard/audit' ||
               href === '/dashboard/backups' ||
-              href === '/dashboard/analytics'
+              href === '/dashboard/settings'
             )) return null;
             const isActive = pathname === href || pathname.startsWith(href + '/');
             return (

@@ -90,6 +90,17 @@ export default function SettingsPage() {
   const { settings, updateSettings, tariffs, addTariff, updateTariff, deleteTariff, currentUser, users, updateUserFull, addUserViaApi, deleteUserViaApi, refreshUsers } = useApp();
   const isAdmin = currentUser?.role === 'admin';
   const isViewer = currentUser?.role === 'viewer';
+
+  if (isViewer) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="text-5xl mb-4">🔒</div>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Доступ ограничен</h2>
+        <p className="text-gray-500">У вас нет доступа к настройкам.<br/>Обратитесь к администратору.</p>
+      </div>
+    );
+  }
+
   const TABS = isAdmin ? ADMIN_TABS : VIEWER_TABS;
 
   const [tab, setTab] = useState<TabId>('general');

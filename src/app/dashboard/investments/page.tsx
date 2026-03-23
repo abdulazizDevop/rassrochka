@@ -165,6 +165,16 @@ export default function InvestmentsPage() {
   const { investors, investPools, accounts, addInvestor, deleteInvestor, currentUser } = useApp();
   const isViewer = currentUser?.role === 'viewer';
 
+  if (isViewer) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="text-5xl mb-4">🔒</div>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Доступ ограничен</h2>
+        <p className="text-gray-500">У вас нет доступа к разделу «Инвестиции».<br/>Обратитесь к администратору.</p>
+      </div>
+    );
+  }
+
   const [tab, setTab] = useState<'investors' | 'pools'>('investors');
   const [search, setSearch] = useState('');
   const [selectedInv, setSelectedInv] = useState<Investor | null>(null);

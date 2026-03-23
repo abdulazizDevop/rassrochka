@@ -46,15 +46,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/upload?clientId=xxx — list photos for a client
+// GET /api/upload?clientId=xxx — list photos for a client (or all if no clientId)
 export async function GET(req: NextRequest) {
   try {
     const clientId = req.nextUrl.searchParams.get('clientId');
-    if (!clientId) return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
     const db = getDb();
-    const rows = db.prepare('SELECT id, filename FROM photos WHERE client_id = ? ORDER BY rowid DESC').all(clientId) as { id: string; filename: string }[];
-    const photos = rows.map(r => ({ id: r.id, url: `/uploads/${r.filename}` }));
-    return NextResponse.json({ photos });
+
+    if (clientId) {
+      const rows = db.prepare('SELECT id, filename FROM photos WHERE client_id = ? ORDER BY rowid DESC').all(clientId) as { id: string; filename: string }[];
+      const photos = rows.map(r => ({ id: r.id, url: `/uploads/${r.filename}` }));
+      return NextResponse.json({ photos });
+    }
+
+    // Return all photos grouped by client_id
+    const rows = db.prepare('SELECT id, client_id, filename FROM photos ORDER BY rowid DESC').all() as { id: string; client_id: string; filename: string }[];
+    const byClient: Record<string, { id: string; url: string }[]> = {};
+    for (const r of rows) {
+      if (!byClient[r.client_id]) byClient[r.client_id] = [];
+      byClient[r.client_id].push({ id: r.id, url: `/uploads/${r.filename}` });
+    }
+    return NextResponse.json({ byClient });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

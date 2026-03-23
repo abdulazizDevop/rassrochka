@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Client } from '@/lib/types';
 import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil } from 'lucide-react';
@@ -130,9 +130,23 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
   const [photos, setPhotos] = useState<string[]>(client.passportPhotos ?? []);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const MAX_PHOTOS = 3;
+
+  // Fetch photos from server on mount
+  useEffect(() => {
+    fetch(`/api/upload?clientId=${encodeURIComponent(client.id)}`)
+      .then(r => r.json())
+      .then((data: { photos: { id: string; url: string }[] }) => {
+        if (data.photos?.length > 0) {
+          setPhotos(data.photos.map(p => p.url));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [client.id]);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -220,7 +234,9 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
           )}
 
           {/* Photos grid */}
-          {photos.length > 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-gray-400 text-sm">Загрузка фото...</div>
+          ) : photos.length > 0 ? (
             <div className="grid grid-cols-3 gap-3 mb-5">
               {photos.map((src, i) => (
                 <div key={i} className="relative group rounded-lg overflow-hidden border border-gray-100 aspect-[4/3]">
@@ -362,19 +378,46 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [passportClient, setPassportClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
+  const [clientPhotos, setClientPhotos] = useState<Record<string, string[]>>({});
+
+  // Load all client photos from server in one request
+  useEffect(() => {
+    fetch('/api/upload')
+      .then(r => r.json())
+      .then((data: { byClient: Record<string, { id: string; url: string }[]> }) => {
+        if (data.byClient) {
+          const map: Record<string, string[]> = {};
+          for (const [cid, photos] of Object.entries(data.byClient)) {
+            map[cid] = photos.map(p => p.url);
+          }
+          setClientPhotos(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Merge server photos into client data for display
+  const clientsWithPhotos = useMemo(() =>
+    clients.map(c => ({
+      ...c,
+      passportPhotos: clientPhotos[c.id] ?? c.passportPhotos ?? [],
+    })),
+    [clients, clientPhotos]
+  );
 
   const filtered = useMemo(() => {
-    if (!search) return clients;
+    if (!search) return clientsWithPhotos;
     const q = search.toLowerCase();
-    return clients.filter(c =>
+    return clientsWithPhotos.filter(c =>
       `${c.firstName} ${c.lastName} ${c.middleName}`.toLowerCase().includes(q) ||
       c.phone.includes(q)
     );
-  }, [clients, search]);
+  }, [clientsWithPhotos, search]);
 
   const handleSavePhotos = (photos: string[]) => {
     if (!passportClient) return;
     updateClient(passportClient.id, { passportPhotos: photos });
+    setClientPhotos(prev => ({ ...prev, [passportClient.id]: photos }));
     setPassportClient(null);
   };
 

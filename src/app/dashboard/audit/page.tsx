@@ -26,7 +26,17 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 export default function AuditPage() {
-  const { auditLog } = useApp();
+  const { auditLog, currentUser } = useApp();
+
+  if (currentUser?.role === 'viewer') {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="text-5xl mb-4">🔒</div>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Доступ ограничен</h2>
+        <p className="text-gray-500">У вас нет доступа к разделу «Аудит».<br/>Обратитесь к администратору.</p>
+      </div>
+    );
+  }
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
