@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 
-export const config = { api: { bodyParser: false } };
+// App Router handles body parsing automatically — no config needed
 
 // POST /api/upload — multipart form upload, saves to /public/uploads/
 export async function POST(req: NextRequest) {
