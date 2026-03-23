@@ -548,15 +548,6 @@ export default function AnalyticsPage() {
 
   return (
     <div className="p-8 max-w-6xl">
-      {currentUser?.role === 'viewer' ? (
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="text-5xl mb-4">🔒</div>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Доступ закрыт</h2>
-            <p className="text-gray-400">У вас нет доступа к разделу Аналитика</p>
-          </div>
-        </div>
-      ) : (
       <>
       <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Аналитика</h1>
@@ -1183,7 +1174,6 @@ export default function AnalyticsPage() {
         )}
         </AnimatePresence>
       </>
-      )}
     </div>
   );
 }
