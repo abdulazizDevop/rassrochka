@@ -1,0 +1,10 @@
+node_modules/
+.venv
+.next
+dist
+build
+.cache
+data/
+debug.log
+backups/
+tsconfig.tsbuildinfo
