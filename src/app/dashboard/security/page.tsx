@@ -45,7 +45,7 @@ export default function SecurityPage() {
                       className="flex items-center gap-1 bg-green-50 text-green-600 border border-green-200 rounded-lg px-3 py-1 text-xs hover:bg-green-100 transition">
                       <Check size={12} /> Утвердить
                     </button>
-                    <button onClick={() => updateContract(c.id, { status: 'Списан' })}
+                    <button onClick={() => updateContract(c.id, { status: 'Списан', approved: true })}
                       className="flex items-center gap-1 bg-red-50 text-red-500 border border-red-200 rounded-lg px-3 py-1 text-xs hover:bg-red-100 transition">
                       <X size={12} /> Отклонить
                     </button>
