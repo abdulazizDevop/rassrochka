@@ -33,7 +33,7 @@ export default function CreateContractPage() {
   const [source, setSource] = useState('Баланс');
   const [tariff, setTariff] = useState('стандарт');
   const [account, setAccount] = useState(ACCOUNTS[0]);
-  const [markup, setMarkup] = useState(0);
+  const [markup, setMarkup] = useState('');
   const [productName, setProductName] = useState('');
   const [startDate, setStartDate] = useState(new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.'));
   const [payDay, setPayDay] = useState(5);
@@ -54,8 +54,9 @@ export default function CreateContractPage() {
 
   const costNum = parseFloat(cost) || 0;
   const firstPaymentNum = parseFloat(firstPayment) || 0;
-  const markupPercent = costNum > 0 ? (markup / costNum) * 100 : 0;
-  const totalWithMarkup = costNum + markup;
+  const markupNum = parseFloat(markup) || 0;
+  const markupAmount = costNum * markupNum / 100;
+  const totalWithMarkup = costNum + markupAmount;
   const amountAfterFirst = totalWithMarkup - firstPaymentNum;
   const monthly = months > 0 ? Math.ceil(amountAfterFirst / months) : 0;
   const total = firstPaymentNum + monthly * months;
@@ -135,7 +136,7 @@ export default function CreateContractPage() {
       paymentStatus: 'Новый договор' as const,
       cost: costNum,
       purchaseCost: parseFloat(purchaseCost) || 0,
-      markup,
+      markup: markupAmount,
       firstPayment: firstPaymentNum,
       months,
       source,
@@ -456,20 +457,25 @@ export default function CreateContractPage() {
                 <span className="font-medium">{costNum.toLocaleString('ru-RU')} ₽</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-white/80">Наценка</span>
+                <span className="text-white/80">Наценка (%)</span>
                 <div className="flex items-center gap-1">
                   <input
                     value={markup}
-                    onChange={e => setMarkup(parseFloat(e.target.value) || 0)}
+                    onChange={e => setMarkup(e.target.value)}
                     type="number"
-                    className="w-20 bg-white/20 border border-white/30 rounded-lg px-2 py-1 text-white text-right text-sm outline-none focus:border-white"
+                    placeholder="0"
+                    className="w-20 bg-white/20 border border-white/30 rounded-lg px-2 py-1 text-white text-right text-sm outline-none focus:border-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-white/80">₽</span>
+                  <span className="text-white/80">%</span>
                 </div>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-white/80">Процент наценки</span>
-                <span className="font-medium">{markupPercent.toFixed(2)} %</span>
+                <span className="text-white/80">Сумма наценки</span>
+                <span className="font-medium">{markupAmount.toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-white/80">Итого с наценкой</span>
+                <span className="font-medium">{totalWithMarkup.toLocaleString('ru-RU')} ₽</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/80">Количество месяцев</span>
@@ -524,7 +530,7 @@ export default function CreateContractPage() {
                       clientId: selectedClient.id, clientName: `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim(),
                       product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
                       remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
-                      cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup, firstPayment: firstPaymentNum,
+                      cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
                       months, source, tariff, account: 'общий', startDate, payDay, comment, approved: false,
                     };
                     await downloadContractPdf(draftContract, selectedClient);
@@ -541,7 +547,7 @@ export default function CreateContractPage() {
                       clientId: selectedClient.id, clientName: `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim(),
                       product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
                       remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
-                      cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup, firstPayment: firstPaymentNum,
+                      cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
                       months, source, tariff, account: 'общий', startDate, payDay, comment, approved: false,
                     };
                     downloadContractExcel(draftContract, selectedClient);
