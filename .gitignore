@@ -4,7 +4,6 @@ node_modules/
 dist
 build
 .cache
-data/
 debug.log
 backups/
 tsconfig.tsbuildinfo

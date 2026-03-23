@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   try {
     const { id, name, totalAmount, available, investors } = await req.json();
-    const db = await getDb();
+    const db = getDb();
     db.prepare(
       `INSERT INTO invest_pools (id, name, total_amount, available, investors) VALUES (?, ?, ?, ?, ?)`
     ).run(id, name, totalAmount, available, JSON.stringify(investors));
@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     values.push(id);
-    const db = await getDb();
+    const db = getDb();
     db.prepare(`UPDATE invest_pools SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id');
-    const db = await getDb();
+    const db = getDb();
     db.prepare(`DELETE FROM invest_pools WHERE id = ?`).run(id);
     return NextResponse.json({ ok: true });
   } catch (e: any) {

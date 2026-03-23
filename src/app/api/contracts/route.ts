@@ -29,20 +29,19 @@ export async function POST(req: NextRequest) {
       comment, approved,
     } = body;
 
-    const db = await getDb();
-    db.run(
+    const db = getDb();
+    db.prepare(
       `INSERT INTO contracts (
         id, number, created_at, end_date, client_id, client_name, product, phone,
         status, remaining_debt, monthly_payment, payment_status, cost, purchase_cost,
         markup, first_payment, months, source, tariff, account, start_date, pay_day,
         comment, approved
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id, number, createdAt, endDate, clientId, clientName, product, phone,
-        status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost,
-        markup, firstPayment, months, source, tariff, account, startDate, payDay,
-        comment, approved ? 1 : 0,
-      ]
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id, number, createdAt, endDate, clientId, clientName, product, phone,
+      status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost ?? null,
+      markup, firstPayment, months, source, tariff, account, startDate, payDay,
+      comment ?? null, approved ? 1 : 0
     );
 
     return NextResponse.json({ ok: true, id });
@@ -71,11 +70,8 @@ export async function PATCH(req: NextRequest) {
     }
 
     values.push(id);
-    const db = await getDb();
-    db.run(
-      `UPDATE contracts SET ${setClauses.join(', ')} WHERE id = ?`,
-      values
-    );
+    const db = getDb();
+    db.prepare(`UPDATE contracts SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -89,8 +85,8 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
-    const db = await getDb();
-    db.run('DELETE FROM contracts WHERE id = ?', [id]);
+    const db = getDb();
+    db.prepare('DELETE FROM contracts WHERE id = ?').run(id);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

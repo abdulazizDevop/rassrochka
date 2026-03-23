@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 export async function POST(req: NextRequest) {
   try {
     const { id, firstName, lastName, middleName, phone, address, contractsCount } = await req.json();
-    const db = await getDb();
+    const db = getDb();
 
     db.prepare(
       `INSERT INTO clients (id, first_name, last_name, middle_name, phone, address, contracts_count)
@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
     const { id, ...updates } = body;
-    const db = await getDb();
+    const db = getDb();
 
     const fieldMap: Record<string, string> = {
       firstName: 'first_name',
@@ -62,7 +62,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-    const db = await getDb();
+    const db = getDb();
 
     db.prepare('DELETE FROM clients WHERE id = ?').run(id);
 

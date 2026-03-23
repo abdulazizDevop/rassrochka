@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   try {
     const { id, name, markup, isDefault } = await req.json();
-    const db = await getDb();
+    const db = getDb();
     db.prepare(
       `INSERT INTO tariffs (id, name, markup, is_default) VALUES (?, ?, ?, ?)`
     ).run(id, name, markup, isDefault ? 1 : 0);
@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     values.push(id);
-    const db = await getDb();
+    const db = getDb();
     db.prepare(`UPDATE tariffs SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id');
-    const db = await getDb();
+    const db = getDb();
     db.prepare(`DELETE FROM tariffs WHERE id = ?`).run(id);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
