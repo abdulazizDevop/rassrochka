@@ -62,3 +62,53 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }
+
+// POST /api/users — create new user
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const login = String(body.login ?? '').trim().slice(0, 64);
+    const password = String(body.password ?? '').slice(0, 128);
+    const name = String(body.name ?? '').trim().slice(0, 128);
+    const role = body.role === 'admin' ? 'admin' : 'viewer';
+
+    if (!login || login.length < 3) return NextResponse.json({ error: 'Логин слишком короткий (мин. 3 символа)' }, { status: 400 });
+    if (!password || password.length < 4) return NextResponse.json({ error: 'Пароль слишком короткий (мин. 4 символа)' }, { status: 400 });
+    if (!name) return NextResponse.json({ error: 'Укажите имя сотрудника' }, { status: 400 });
+
+    const db = getDb();
+    const exists = db.prepare('SELECT login FROM users WHERE login = ?').get(login);
+    if (exists) return NextResponse.json({ error: 'Логин уже занят' }, { status: 409 });
+
+    const hash = bcrypt.hashSync(password, 10);
+    db.prepare('INSERT INTO users (login, password, name, role) VALUES (?, ?, ?, ?)').run(login, hash, name, role);
+
+    return NextResponse.json({ login, name, role }, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
+  }
+}
+
+// DELETE /api/users — delete user
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const login = searchParams.get('login');
+    if (!login) return NextResponse.json({ error: 'Не указан логин' }, { status: 400 });
+
+    const db = getDb();
+    const row = db.prepare('SELECT role FROM users WHERE login = ?').get(login) as { role: string } | undefined;
+    if (!row) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
+
+    // Prevent deleting the last admin
+    if (row.role === 'admin') {
+      const adminCount = db.prepare('SELECT COUNT(*) as cnt FROM users WHERE role = ?').get('admin') as { cnt: number };
+      if (adminCount.cnt <= 1) return NextResponse.json({ error: 'Нельзя удалить последнего администратора' }, { status: 400 });
+    }
+
+    db.prepare('DELETE FROM users WHERE login = ?').run(login);
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
+  }
+}

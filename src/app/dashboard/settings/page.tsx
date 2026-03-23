@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { DollarSign, Paperclip, List, Lock, Printer, Plus, Trash2, Check, Info, Users, Eye, EyeOff, Download, FileText } from 'lucide-react';
+import { DollarSign, Paperclip, List, Lock, Printer, Plus, Trash2, Check, Info, Users, Eye, EyeOff, Download, FileText, UserPlus, Pencil } from 'lucide-react';
 
 type Template = { id: string; filename: string; original_name: string; url: string; created_at: string };
 
@@ -87,7 +87,7 @@ function PasswordField({ label, value, onChange, show, onToggle, placeholder }: 
 }
 
 export default function SettingsPage() {
-  const { settings, updateSettings, tariffs, addTariff, updateTariff, deleteTariff, currentUser, users, updateUserFull } = useApp();
+  const { settings, updateSettings, tariffs, addTariff, updateTariff, deleteTariff, currentUser, users, updateUserFull, addUserViaApi, deleteUserViaApi, refreshUsers } = useApp();
   const isAdmin = currentUser?.role === 'admin';
   const isViewer = currentUser?.role === 'viewer';
   const TABS = isAdmin ? ADMIN_TABS : VIEWER_TABS;
@@ -155,14 +155,31 @@ export default function SettingsPage() {
   const [showOwnConfirm, setShowOwnConfirm] = useState(false);
   const [ownSaving, setOwnSaving] = useState(false);
 
-  // Manager account management (admin only)
-  const managerUser = users.find(u => u.role === 'viewer');
-  const [mgLogin, setMgLogin] = useState(managerUser?.login ?? 'manager');
-  const [mgPass, setMgPass] = useState('');
-  const [mgConfirm, setMgConfirm] = useState('');
-  const [mgMsg, setMgMsg] = useState('');
-  const [showMgPass, setShowMgPass] = useState(false);
-  const [mgSaving, setMgSaving] = useState(false);
+  // User management (admin only)
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [editLogin, setEditLogin] = useState('');
+  const [editPass, setEditPass] = useState('');
+  const [editConfirm, setEditConfirm] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editMsg, setEditMsg] = useState('');
+  const [showEditPass, setShowEditPass] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteUserLogin, setDeleteUserLogin] = useState<string | null>(null);
+  const [deleteUserSaving, setDeleteUserSaving] = useState(false);
+  // Add user form
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserLogin, setNewUserLogin] = useState('');
+  const [newUserPass, setNewUserPass] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'viewer'>('viewer');
+  const [newUserMsg, setNewUserMsg] = useState('');
+  const [showNewUserPass, setShowNewUserPass] = useState(false);
+  const [newUserSaving, setNewUserSaving] = useState(false);
+
+  // Refresh users when switching to users tab
+  useEffect(() => {
+    if (tab === 'users' && isAdmin) { refreshUsers(); }
+  }, [tab, isAdmin, refreshUsers]);
 
   const handleSave = () => {
     updateSettings(local);
@@ -207,28 +224,78 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveManager = async () => {
-    if (!managerUser) return;
-    const loginChanged = mgLogin.trim() !== managerUser.login;
-    const passChanged = mgPass.length > 0;
-    if (!loginChanged && !passChanged) { setMgMsg('Нет изменений для сохранения'); return; }
-    if (mgPass && mgPass.length < 4) { setMgMsg('Пароль слишком короткий (мин. 4 символа)'); return; }
-    if (mgPass && mgPass !== mgConfirm) { setMgMsg('Пароли не совпадают'); return; }
-    setMgSaving(true);
+  const startEditUser = (u: { login: string; name: string }) => {
+    setEditingUser(u.login);
+    setEditLogin(u.login);
+    setEditName(u.name);
+    setEditPass('');
+    setEditConfirm('');
+    setEditMsg('');
+    setShowEditPass(false);
+  };
+
+  const handleSaveEditUser = async () => {
+    if (!editingUser) return;
+    const loginChanged = editLogin.trim() !== editingUser;
+    const passChanged = editPass.length > 0;
+    const user = users.find(u => u.login === editingUser);
+    const nameChanged = editName.trim() !== (user?.name ?? '');
+    if (!loginChanged && !passChanged && !nameChanged) { setEditMsg('Нет изменений для сохранения'); return; }
+    if (editPass && editPass.length < 4) { setEditMsg('Пароль слишком короткий (мин. 4 символа)'); return; }
+    if (editPass && editPass !== editConfirm) { setEditMsg('Пароли не совпадают'); return; }
+    if (!editLogin.trim() || editLogin.trim().length < 3) { setEditMsg('Логин слишком короткий (мин. 3 символа)'); return; }
+    setEditSaving(true);
     const result = await updateUserFull(
-      managerUser.login,
-      loginChanged ? mgLogin.trim() : undefined,
-      passChanged ? mgPass : undefined,
+      editingUser,
+      loginChanged ? editLogin.trim() : undefined,
+      passChanged ? editPass : undefined,
       undefined,
       true,
     );
-    setMgSaving(false);
+    // Update name separately if needed
+    if (result.ok && nameChanged) {
+      await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: result.newLogin ?? editingUser, newName: editName.trim(), skipCurrentPasswordCheck: true }),
+      });
+      await refreshUsers();
+    }
+    setEditSaving(false);
     if (result.ok) {
-      setMgMsg('Данные менеджера сохранены');
-      setMgPass(''); setMgConfirm('');
-      setTimeout(() => setMgMsg(''), 3000);
+      setEditMsg('Данные сохранены');
+      setEditPass(''); setEditConfirm('');
+      setTimeout(() => { setEditMsg(''); setEditingUser(null); }, 1500);
     } else {
-      setMgMsg(result.error ?? 'Ошибка сохранения');
+      setEditMsg(result.error ?? 'Ошибка сохранения');
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUserLogin.trim() || newUserLogin.trim().length < 3) { setNewUserMsg('Логин слишком короткий (мин. 3 символа)'); return; }
+    if (!newUserPass || newUserPass.length < 4) { setNewUserMsg('Пароль слишком короткий (мин. 4 символа)'); return; }
+    if (!newUserName.trim()) { setNewUserMsg('Укажите имя сотрудника'); return; }
+    setNewUserSaving(true);
+    const result = await addUserViaApi(newUserLogin.trim(), newUserPass, newUserName.trim(), newUserRole);
+    setNewUserSaving(false);
+    if (result.ok) {
+      setNewUserMsg('Сотрудник добавлен');
+      setNewUserLogin(''); setNewUserPass(''); setNewUserName(''); setNewUserRole('viewer');
+      setTimeout(() => { setNewUserMsg(''); setShowAddUser(false); }, 1500);
+    } else {
+      setNewUserMsg(result.error ?? 'Ошибка создания');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserLogin) return;
+    setDeleteUserSaving(true);
+    const result = await deleteUserViaApi(deleteUserLogin);
+    setDeleteUserSaving(false);
+    if (result.ok) {
+      setDeleteUserLogin(null);
+    } else {
+      setDeleteUserLogin(null);
     }
   };
 
@@ -538,70 +605,213 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Users — admin only: manage manager account */}
+      {/* Users — admin only: full user management */}
       {tab === 'users' && isAdmin && (
-        <div className="space-y-4 max-w-lg">
-          <div className="bg-white rounded-xl border border-gray-100 p-6">
-            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
-              <Users size={16} className="text-gray-500" />
-              <h2 className="font-semibold text-gray-800">Аккаунт менеджера</h2>
-              <span className="ml-auto text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full font-medium">Только просмотр</span>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-600 block mb-1.5">Логин менеджера</label>
-                <input
-                  type="text"
-                  value={mgLogin}
-                  onChange={e => setMgLogin(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30"
-                />
-                <p className="text-xs text-gray-400 mt-1">Текущий: <span className="font-medium text-gray-600">{managerUser?.login ?? 'manager'}</span></p>
+        <div className="space-y-4 max-w-2xl">
+          <div className="bg-white rounded-xl border border-gray-100">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Users size={17} className="text-gray-500" />
+                <span className="font-semibold text-gray-800">Сотрудники</span>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{users.length}</span>
               </div>
-
-              <PasswordField
-                label="Новый пароль менеджера"
-                value={mgPass}
-                onChange={setMgPass}
-                show={showMgPass}
-                onToggle={() => setShowMgPass(v => !v)}
-                placeholder="Оставьте пустым, чтобы не менять"
-              />
-
-              <div>
-                <label className="text-sm text-gray-600 block mb-1.5">Подтвердите пароль</label>
-                <div className="relative">
-                  <input
-                    type={showMgPass ? 'text' : 'password'}
-                    value={mgConfirm}
-                    onChange={e => setMgConfirm(e.target.value)}
-                    placeholder="Повторите пароль"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30"
-                  />
-                </div>
-              </div>
-
-              {mgMsg && (
-                <p className={`text-sm ${mgMsg.includes('сохранен') ? 'text-green-600' : 'text-red-500'}`}>{mgMsg}</p>
-              )}
-
               <button
-                onClick={handleSaveManager}
-                disabled={mgSaving}
-                className="flex items-center gap-2 bg-[#5B5BD6] text-white text-sm px-5 py-2.5 rounded-lg hover:bg-[#4a4ab5] transition-colors disabled:opacity-50"
+                onClick={() => { setShowAddUser(true); setNewUserMsg(''); setNewUserLogin(''); setNewUserPass(''); setNewUserName(''); setNewUserRole('viewer'); }}
+                className="flex items-center gap-1.5 border border-[#5B5BD6] text-[#5B5BD6] text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#EEF0FF] transition-colors"
               >
-                <Check size={15} />
-                {mgSaving ? 'Сохранение...' : 'Сохранить данные менеджера'}
+                <UserPlus size={15} />
+                Добавить сотрудника
               </button>
             </div>
+
+            {/* User list */}
+            <div className="divide-y divide-gray-50">
+              {users.map(u => (
+                <div key={u.login}>
+                  <div className="flex items-center gap-4 px-5 py-3.5">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${u.role === 'admin' ? 'bg-[#EEF0FF]' : 'bg-gray-50'}`}>
+                      <Users size={16} className={u.role === 'admin' ? 'text-[#5B5BD6]' : 'text-gray-400'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">{u.name || u.login}</p>
+                      <p className="text-xs text-gray-400">
+                        Логин: <span className="text-gray-600">{u.login}</span>
+                        {' · '}
+                        <span className={u.role === 'admin' ? 'text-[#5B5BD6]' : 'text-amber-600'}>
+                          {u.role === 'admin' ? 'Администратор' : 'Менеджер (просмотр)'}
+                        </span>
+                        {u.login === currentUser?.login && <span className="ml-1 text-green-600">(вы)</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {u.login !== currentUser?.login && (
+                        <>
+                          <button
+                            onClick={() => startEditUser(u)}
+                            title="Редактировать"
+                            className="text-gray-400 hover:text-[#5B5BD6] p-1.5 rounded-lg hover:bg-[#EEF0FF] transition-colors"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteUserLogin(u.login)}
+                            title="Удалить"
+                            className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Inline edit form */}
+                  {editingUser === u.login && (
+                    <div className="px-5 pb-4 pt-1 bg-gray-50/50 border-t border-gray-100">
+                      <div className="max-w-md space-y-3">
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">Имя</label>
+                          <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">Логин</label>
+                          <input type="text" value={editLogin} onChange={e => setEditLogin(e.target.value)}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                        </div>
+                        <PasswordField
+                          label="Новый пароль"
+                          value={editPass}
+                          onChange={setEditPass}
+                          show={showEditPass}
+                          onToggle={() => setShowEditPass(v => !v)}
+                          placeholder="Оставьте пустым, чтобы не менять"
+                        />
+                        {editPass && (
+                          <PasswordField
+                            label="Подтвердите пароль"
+                            value={editConfirm}
+                            onChange={setEditConfirm}
+                            show={showEditPass}
+                            onToggle={() => setShowEditPass(v => !v)}
+                            placeholder="Повторите пароль"
+                          />
+                        )}
+                        {editMsg && (
+                          <p className={`text-sm ${editMsg.includes('сохранен') ? 'text-green-600' : 'text-red-500'}`}>{editMsg}</p>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={handleSaveEditUser} disabled={editSaving}
+                            className="flex items-center gap-1.5 bg-[#5B5BD6] text-white text-sm px-4 py-2 rounded-lg hover:bg-[#4a4ab5] transition-colors disabled:opacity-50">
+                            <Check size={14} />
+                            {editSaving ? 'Сохранение...' : 'Сохранить'}
+                          </button>
+                          <button onClick={() => setEditingUser(null)}
+                            className="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {users.length === 0 && (
+              <div className="py-12 text-center text-gray-400 text-sm">Сотрудники не найдены</div>
+            )}
           </div>
+
+          {/* Add user form modal */}
+          {showAddUser && (
+            <div className="bg-white rounded-xl border border-[#5B5BD6]/20 p-6">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+                <UserPlus size={16} className="text-[#5B5BD6]" />
+                <h2 className="font-semibold text-gray-800">Добавить сотрудника</h2>
+              </div>
+              <div className="max-w-md space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Имя сотрудника <span className="text-red-400">*</span></label>
+                  <input type="text" value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Например: Иван Петров"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Логин <span className="text-red-400">*</span></label>
+                  <input type="text" value={newUserLogin} onChange={e => setNewUserLogin(e.target.value)} placeholder="Мин. 3 символа"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                </div>
+                <PasswordField
+                  label="Пароль *"
+                  value={newUserPass}
+                  onChange={setNewUserPass}
+                  show={showNewUserPass}
+                  onToggle={() => setShowNewUserPass(v => !v)}
+                  placeholder="Мин. 4 символа"
+                />
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1.5">Роль</label>
+                  <div className="flex gap-2">
+                    {([['viewer', 'Менеджер (просмотр)'], ['admin', 'Администратор']] as const).map(([r, label]) => (
+                      <button key={r} onClick={() => setNewUserRole(r)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${newUserRole === r ? 'border-[#5B5BD6] text-[#5B5BD6] bg-[#EEF0FF]' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {newUserMsg && (
+                  <p className={`text-sm ${newUserMsg.includes('добавлен') ? 'text-green-600' : 'text-red-500'}`}>{newUserMsg}</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={handleAddUser} disabled={newUserSaving}
+                    className="flex items-center gap-1.5 bg-[#5B5BD6] text-white text-sm px-4 py-2 rounded-lg hover:bg-[#4a4ab5] transition-colors disabled:opacity-50">
+                    <Plus size={14} />
+                    {newUserSaving ? 'Создание...' : 'Добавить'}
+                  </button>
+                  <button onClick={() => setShowAddUser(false)}
+                    className="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
             <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700">
-              Менеджер видит все данные, но <strong>не может редактировать</strong>. Смена пароля доступна ему самостоятельно через вкладку «Пароль».
+              <strong>Администратор</strong> — полный доступ ко всем функциям.
+              <strong className="ml-1">Менеджер</strong> — видит все данные, но не может редактировать.
+              Каждый сотрудник может сменить свой пароль через вкладку «Пароль».
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Delete user confirmation modal */}
+      {deleteUserLogin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteUserLogin(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Удалить сотрудника?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-1">Логин: <span className="font-medium text-gray-700">{deleteUserLogin}</span></p>
+            <p className="text-sm text-gray-500 mb-6">Это действие нельзя отменить. Аккаунт будет удалён навсегда.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteUserLogin(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                Отмена
+              </button>
+              <button onClick={handleDeleteUser} disabled={deleteUserSaving}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition disabled:opacity-50">
+                {deleteUserSaving ? 'Удаление...' : 'Удалить'}
+              </button>
+            </div>
           </div>
         </div>
       )}

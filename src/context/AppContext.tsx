@@ -26,6 +26,9 @@ interface AppContextType {
     updateUser: (login: string, updates: Partial<Pick<UserAccount, 'name' | 'password'>>) => void;
     updateUserViaApi: (login: string, newPassword: string) => Promise<boolean>;
     updateUserFull: (login: string, newLogin?: string, newPassword?: string, currentPassword?: string, skipCurrentPasswordCheck?: boolean) => Promise<{ ok: boolean; error?: string; newLogin?: string }>;
+    addUserViaApi: (login: string, password: string, name: string, role: UserRole) => Promise<{ ok: boolean; error?: string }>;
+    deleteUserViaApi: (login: string) => Promise<{ ok: boolean; error?: string }>;
+    refreshUsers: () => Promise<void>;
   addContract: (contract: Contract) => void;
   deleteContract: (id: string) => void;
   addClient: (client: Client) => void;
@@ -202,6 +205,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, error: 'Ошибка соединения' };
       }
     }, []);
+
+  const addUserViaApi = useCallback(async (loginStr: string, password: string, name: string, role: UserRole): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginStr, password, name, role }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        return { ok: false, error: data.error ?? 'Ошибка создания' };
+      }
+      const created = await res.json() as { login: string; name: string; role: string };
+      setUsers(prev => [...prev, { login: created.login, name: created.name, role: created.role as UserRole, password: '' }]);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Ошибка соединения' };
+    }
+  }, []);
+
+  const deleteUserViaApi = useCallback(async (loginStr: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`/api/users?login=${encodeURIComponent(loginStr)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        return { ok: false, error: data.error ?? 'Ошибка удаления' };
+      }
+      setUsers(prev => prev.filter(u => u.login !== loginStr));
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Ошибка соединения' };
+    }
+  }, []);
+
+  const refreshUsers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const allUsers = await res.json() as Omit<UserAccount, 'password'>[];
+        setUsers(prev => allUsers.map(u => {
+          const existing = prev.find(p => p.login === u.login);
+          return { ...u, password: existing?.password ?? '' } as UserAccount;
+        }));
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const addContract = useCallback((contract: Contract) => {
     setContracts(prev => [...prev, contract]);
@@ -506,7 +555,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       contracts, clients, products, accounts, transfers, ledger, investors, investPools,
       auditLog, settings, tariffs, backups,
-        isLoggedIn, hydrated, currentUser, users, login, loginWithApi, logout, updateUser, updateUserViaApi, updateUserFull,
+        isLoggedIn, hydrated, currentUser, users, login, loginWithApi, logout, updateUser, updateUserViaApi, updateUserFull, addUserViaApi, deleteUserViaApi, refreshUsers,
         addContract, deleteContract, addClient, updateClient, deleteClient, updateContract,
       transferBetweenAccounts, depositAccount, withdrawAccount,
       addAccount, deleteAccount,
