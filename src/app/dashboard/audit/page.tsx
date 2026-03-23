@@ -12,6 +12,13 @@ function parseDMY(str: string): Date | null {
   return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
 }
 
+function formatDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return digits.slice(0, 2) + '.' + digits.slice(2);
+  return digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+}
+
 const ACTION_COLORS: Record<string, string> = {
   'Создание': 'bg-green-100 text-green-700',
   'Редактирование': 'bg-blue-100 text-blue-700',
@@ -35,11 +42,11 @@ export default function AuditPage() {
     return auditLog.filter(entry => {
       const entryDate = parseDMY(entry.timestamp);
       if (dateFrom) {
-        const from = parseDMY(dateFrom.split('-').reverse().join('.'));
+        const from = parseDMY(dateFrom);
         if (from && entryDate && entryDate < from) return false;
       }
       if (dateTo) {
-        const to = parseDMY(dateTo.split('-').reverse().join('.'));
+        const to = parseDMY(dateTo);
         if (to && entryDate && entryDate > to) return false;
       }
       if (sectionFilter && entry.section !== sectionFilter) return false;
@@ -64,9 +71,10 @@ export default function AuditPage() {
           <div>
             <label className="block text-xs text-gray-500 mb-1.5">Период с</label>
             <input
-              type="date"
+              type="text"
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onChange={e => setDateFrom(formatDateInput(e.target.value))}
+              maxLength={10}
               placeholder={todayStr}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30 focus:border-[#5B5BD6]"
             />
@@ -74,9 +82,10 @@ export default function AuditPage() {
           <div>
             <label className="block text-xs text-gray-500 mb-1.5">Период по</label>
             <input
-              type="date"
+              type="text"
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onChange={e => setDateTo(formatDateInput(e.target.value))}
+              maxLength={10}
               placeholder={todayStr}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30 focus:border-[#5B5BD6]"
             />

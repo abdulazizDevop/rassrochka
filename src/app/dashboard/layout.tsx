@@ -12,16 +12,16 @@ interface DiskInfo {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn } = useApp();
+  const { isLoggedIn, hydrated } = useApp();
   const router = useRouter();
   const [disk, setDisk] = useState<DiskInfo | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (hydrated && !isLoggedIn) {
       router.replace('/login');
     }
-  }, [isLoggedIn, router]);
+  }, [hydrated, isLoggedIn, router]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -31,7 +31,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch(() => {});
   }, [isLoggedIn]);
 
-  if (!isLoggedIn) return null;
+  if (!hydrated || !isLoggedIn) return null;
 
   const showWarning = !dismissed && disk?.warning;
 

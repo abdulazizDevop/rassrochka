@@ -17,6 +17,7 @@ interface AppContextType {
   tariffs: Tariff[];
   backups: BackupEntry[];
   isLoggedIn: boolean;
+  hydrated: boolean;
   currentUser: UserAccount | null;
   users: UserAccount[];
   login: (username: string, password: string) => boolean;
@@ -69,6 +70,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [investors, setInvestors] = useState<Investor[]>(MOCK_INVESTORS);
   const [investPools] = useState<InvestPool[]>(MOCK_INVEST_POOLS);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
 
   useEffect(() => {
@@ -81,6 +83,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (s) setCurrentUser(JSON.parse(s) as UserAccount);
       } catch { /* ignore */ }
     }
+    setHydrated(true);
   }, []);
     const [users, setUsers] = useState<UserAccount[]>([]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
@@ -503,7 +506,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       contracts, clients, products, accounts, transfers, ledger, investors, investPools,
       auditLog, settings, tariffs, backups,
-        isLoggedIn, currentUser, users, login, loginWithApi, logout, updateUser, updateUserViaApi, updateUserFull,
+        isLoggedIn, hydrated, currentUser, users, login, loginWithApi, logout, updateUser, updateUserViaApi, updateUserFull,
         addContract, deleteContract, addClient, updateClient, deleteClient, updateContract,
       transferBetweenAccounts, depositAccount, withdrawAccount,
       addAccount, deleteAccount,

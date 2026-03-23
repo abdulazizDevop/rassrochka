@@ -3,7 +3,7 @@ import './globals.css';
 import { AppProvider } from '@/context/AppContext';
 
 export const metadata: Metadata = {
-  title: 'Akhmad — Система рассрочки',
+  title: 'AkhmadPay — Система рассрочки',
   description: 'Управление договорами рассрочки',
 };
 

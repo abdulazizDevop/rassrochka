@@ -8,6 +8,13 @@ function fmt(n: number) {
   return n.toLocaleString('ru-RU') + ' ₽';
 }
 
+function formatDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return digits.slice(0, 2) + '.' + digits.slice(2);
+  return digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+}
+
 function parseDate(str: string): Date | null {
   const m = str.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
   if (!m) return null;
@@ -281,8 +288,8 @@ export default function AnalyticsPage() {
   const { contracts, ledger, investors, currentUser } = useApp();
 
   const today = new Date();
-  const [dateFrom, setDateFrom] = useState(toInputDate(today));
-  const [dateTo, setDateTo] = useState(toInputDate(today));
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [source, setSource] = useState('Все источники');
   const [sourceOpen, setSourceOpen] = useState(false);
   const [showOpsModal, setShowOpsModal] = useState<false | 'income' | 'expense'>(false);
@@ -565,10 +572,10 @@ export default function AnalyticsPage() {
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Период:</p>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">С</span>
-            <input type="text" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="дд.мм.гггг"
+            <input type="text" value={dateFrom} onChange={e => setDateFrom(formatDateInput(e.target.value))} maxLength={10} placeholder="дд.мм.гггг"
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             <span className="text-sm text-gray-500">По</span>
-            <input type="text" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="дд.мм.гггг"
+            <input type="text" value={dateTo} onChange={e => setDateTo(formatDateInput(e.target.value))} maxLength={10} placeholder="дд.мм.гггг"
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
           </div>
         </div>

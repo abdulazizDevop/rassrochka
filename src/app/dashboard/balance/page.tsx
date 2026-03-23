@@ -12,6 +12,13 @@ function todayStr() {
   return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
 }
 
+function formatDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return digits.slice(0, 2) + '.' + digits.slice(2);
+  return digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+}
+
 const OPERATION_TYPES = ['Все типы', 'Пополнение', 'Списание', 'Перевод между счетами', 'Платёж клиента', 'Новый договор'];
 
 export default function BalancePage() {
@@ -409,11 +416,11 @@ export default function BalancePage() {
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">С даты</label>
-                <input type="text" value={ledgerFromDate} onChange={e => setLedgerFromDate(e.target.value)} placeholder={todayStr()} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <input type="text" value={ledgerFromDate} onChange={e => setLedgerFromDate(formatDateInput(e.target.value))} maxLength={10} placeholder={todayStr()} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">По дату</label>
-                <input type="text" value={ledgerToDate} onChange={e => setLedgerToDate(e.target.value)} placeholder={todayStr()} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <input type="text" value={ledgerToDate} onChange={e => setLedgerToDate(formatDateInput(e.target.value))} maxLength={10} placeholder={todayStr()} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Пользователь</label>
