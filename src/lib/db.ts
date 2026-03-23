@@ -163,6 +163,13 @@ function initSchema(db: Database.Database) {
       category TEXT NOT NULL DEFAULT '',
       price    REAL NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS templates (
+      id            TEXT PRIMARY KEY,
+      filename      TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      created_at    TEXT NOT NULL
+    );
   `);
 
   // Migrate plaintext passwords to bcrypt hashes

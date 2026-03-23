@@ -47,7 +47,7 @@ function NumberInput({ label, value, onChange, hint }: { label: string; value: n
   return (
     <div className="mb-5">
       <label className="block text-sm text-gray-700 mb-1.5">{label}</label>
-      <div className="relative w-80">
+      <div className="relative w-full max-w-80">
         <input
           type="number"
           value={value}
@@ -322,14 +322,14 @@ export default function SettingsPage() {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 px-3 sm:px-4 py-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 tab === id
                   ? 'border-[#5B5BD6] text-[#5B5BD6]'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <Icon size={15} />
-              {label}
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -338,7 +338,7 @@ export default function SettingsPage() {
       {/* General */}
       {tab === 'general' && (
         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 flex-wrap">
-          <div className="flex-1 min-w-80 bg-white rounded-xl border border-gray-100 p-6">
+          <div className="flex-1 min-w-0 sm:min-w-80 bg-white rounded-xl border border-gray-100 p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
               <DollarSign size={16} className="text-gray-500" />
               <h2 className="font-semibold text-gray-800">Общие настройки</h2>
@@ -353,7 +353,7 @@ export default function SettingsPage() {
             ].map(({ label, value }) => isViewer ? (
               <div key={label} className="mb-5">
                 <label className="block text-sm text-gray-500 mb-1">{label}</label>
-                <div className="w-80 border border-gray-100 bg-gray-50 rounded-lg px-3 py-2.5 text-sm text-gray-700">{value}</div>
+                <div className="w-full max-w-80 border border-gray-100 bg-gray-50 rounded-lg px-3 py-2.5 text-sm text-gray-700">{value}</div>
               </div>
             ) : null)}
             {!isViewer && <>
@@ -375,7 +375,7 @@ export default function SettingsPage() {
             </>}
           </div>
 
-          <div className="w-72">
+          <div className="w-full sm:w-72">
             <div className="bg-white rounded-xl border border-gray-100 p-5">
               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -410,7 +410,7 @@ export default function SettingsPage() {
       {/* Files */}
       {tab === 'files' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Paperclip size={16} className="text-gray-500" />
@@ -472,9 +472,9 @@ export default function SettingsPage() {
               )
             )}
           </div>
-          <div className="bg-white rounded-xl border border-[#5B5BD6]/20 p-6">
+          <div className="bg-white rounded-xl border border-[#5B5BD6]/20 p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-1">
-              <Info size={16} className="text-[#5B5BD6]" />
+              <Info size={16} className="text-[#5B5BD6] shrink-0" />
               <h2 className="font-semibold text-[#5B5BD6]">Доступные переменные для шаблона</h2>
             </div>
             <p className="text-sm text-gray-500 mb-4">В вашем документе Word используйте переменные в фигурных скобках, например: {'{fio}'}</p>
@@ -493,7 +493,7 @@ export default function SettingsPage() {
 
       {/* Tariffs */}
       {tab === 'tariffs' && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6">
           <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
             <List size={16} className="text-gray-500" />
             <h2 className="font-semibold text-gray-800">Тарифы</h2>
@@ -501,22 +501,24 @@ export default function SettingsPage() {
           </div>
           <div className="space-y-2 mb-6">
             {tariffs.map(t => (
-              <div key={t.id} className="flex items-center gap-3 border border-gray-100 rounded-lg px-4 py-3">
-                <div className="flex-1">
+              <div key={t.id} className="flex flex-wrap items-center gap-2 sm:gap-3 border border-gray-100 rounded-lg px-3 sm:px-4 py-3">
+                <div className="flex-1 min-w-0">
                   <span className="font-medium text-sm text-gray-800">{t.name}</span>
                   {t.isDefault && <span className="ml-2 text-xs text-[#5B5BD6] bg-[#EEF0FF] px-2 py-0.5 rounded-full">по умолчанию</span>}
                 </div>
-                <span className="text-sm text-gray-500">Наценка:</span>
-                {isViewer ? (
-                  <span className="w-20 border border-gray-100 bg-gray-50 rounded-lg px-2 py-1 text-sm text-gray-700 text-center">{t.markup}</span>
-                ) : (
-                  <input type="number" value={t.markup} onChange={e => updateTariff(t.id, { markup: Number(e.target.value) })}
-                    className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
-                )}
-                <span className="text-sm text-gray-400">%</span>
-                {!t.isDefault && !isViewer && (
-                  <button onClick={() => deleteTariff(t.id)} className="text-red-400 hover:text-red-600"><Trash2 size={15} /></button>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Наценка:</span>
+                  {isViewer ? (
+                    <span className="w-20 border border-gray-100 bg-gray-50 rounded-lg px-2 py-1 text-sm text-gray-700 text-center">{t.markup}</span>
+                  ) : (
+                    <input type="number" value={t.markup} onChange={e => updateTariff(t.id, { markup: Number(e.target.value) })}
+                      className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                  )}
+                  <span className="text-sm text-gray-400">%</span>
+                  {!t.isDefault && !isViewer && (
+                    <button onClick={() => deleteTariff(t.id)} className="text-red-400 hover:text-red-600"><Trash2 size={15} /></button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -524,18 +526,18 @@ export default function SettingsPage() {
             <div className="border border-dashed border-gray-200 rounded-xl p-4">
               <p className="text-sm font-medium text-gray-700 mb-3">Добавить тариф</p>
               <div className="flex gap-3 items-end flex-wrap">
-                <div>
+                <div className="w-full sm:w-auto">
                   <label className="text-xs text-gray-500 block mb-1">Название</label>
                   <input type="text" value={newTariffName} onChange={e => setNewTariffName(e.target.value)} placeholder="Название тарифа"
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full sm:w-44 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
                 </div>
-                <div>
+                <div className="flex-1 sm:flex-initial">
                   <label className="text-xs text-gray-500 block mb-1">Наценка (%)</label>
                   <input type="number" value={newTariffMarkup} onChange={e => setNewTariffMarkup(Number(e.target.value))}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full sm:w-24 focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30" />
                 </div>
                 <button onClick={handleAddTariff}
-                  className="flex items-center gap-1.5 bg-[#5B5BD6] text-white text-sm px-4 py-2 rounded-lg hover:bg-[#4a4ab5] transition-colors">
+                  className="flex items-center justify-center gap-1.5 bg-[#5B5BD6] text-white text-sm px-4 py-2 rounded-lg hover:bg-[#4a4ab5] transition-colors w-full sm:w-auto">
                   <Plus size={15} />Добавить
                 </button>
               </div>
@@ -546,7 +548,7 @@ export default function SettingsPage() {
 
       {/* Password — available to ALL users (own credentials) */}
       {tab === 'password' && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-md">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 max-w-md">
           <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
             <Lock size={16} className="text-gray-500" />
             <h2 className="font-semibold text-gray-800">Смена логина и пароля</h2>
@@ -618,10 +620,10 @@ export default function SettingsPage() {
 
       {/* Users — admin only: full user management */}
       {tab === 'users' && isAdmin && (
-        <div className="space-y-4 max-w-2xl">
+        <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-100">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Users size={17} className="text-gray-500" />
                 <span className="font-semibold text-gray-800">Сотрудники</span>
@@ -629,7 +631,7 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={() => { setShowAddUser(true); setNewUserMsg(''); setNewUserLogin(''); setNewUserPass(''); setNewUserName(''); setNewUserRole('viewer'); }}
-                className="flex items-center gap-1.5 border border-[#5B5BD6] text-[#5B5BD6] text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#EEF0FF] transition-colors"
+                className="flex items-center justify-center gap-1.5 border border-[#5B5BD6] text-[#5B5BD6] text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#EEF0FF] transition-colors"
               >
                 <UserPlus size={15} />
                 Добавить сотрудника
@@ -640,7 +642,7 @@ export default function SettingsPage() {
             <div className="divide-y divide-gray-50">
               {users.map(u => (
                 <div key={u.login}>
-                  <div className="flex items-center gap-4 px-5 py-3.5">
+                  <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${u.role === 'admin' ? 'bg-[#EEF0FF]' : 'bg-gray-50'}`}>
                       <Users size={16} className={u.role === 'admin' ? 'text-[#5B5BD6]' : 'text-gray-400'} />
                     </div>
@@ -763,7 +765,7 @@ export default function SettingsPage() {
                 />
                 <div>
                   <label className="text-xs text-gray-500 block mb-1.5">Роль</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {([['viewer', 'Менеджер (просмотр)'], ['admin', 'Администратор']] as const).map(([r, label]) => (
                       <button key={r} onClick={() => setNewUserRole(r)}
                         className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${newUserRole === r ? 'border-[#5B5BD6] text-[#5B5BD6] bg-[#EEF0FF]' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
