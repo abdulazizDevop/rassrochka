@@ -107,6 +107,11 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [local, setLocal] = useState({ ...settings });
 
+  // Sync local state when settings load/change from API
+  useEffect(() => {
+    setLocal({ ...settings });
+  }, [settings]);
+
   // Templates state
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -375,7 +380,7 @@ export default function SettingsPage() {
             </>}
           </div>
 
-          <div className="w-full sm:w-72">
+          <div className="w-full sm:w-72 space-y-4">
             <div className="bg-white rounded-xl border border-gray-100 p-5">
               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -402,6 +407,71 @@ export default function SettingsPage() {
                 onChange={e => !isViewer && setLocal(s => ({ ...s, companyName: e.target.value }))}
                 readOnly={isViewer}
                 className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none ${isViewer ? 'bg-gray-50 text-gray-600 cursor-default' : 'focus:ring-2 focus:ring-[#5B5BD6]/30'}`} />
+            </div>
+
+            {/* Payment methods */}
+            <div className="bg-white rounded-xl border border-gray-100 p-5">
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+                <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
+                  <DollarSign size={18} className="text-green-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Способы оплаты</p>
+                  <p className="text-xs text-gray-400">Управление способами оплаты</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-3">
+                {(local.paymentMethods ?? []).map((method, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm text-gray-700 border border-gray-100 rounded-lg px-3 py-1.5">{method}</span>
+                    {!isViewer && (
+                      <button onClick={() => setLocal(s => ({
+                        ...s,
+                        paymentMethods: (s.paymentMethods ?? []).filter((_, idx) => idx !== i),
+                      }))} className="text-gray-300 hover:text-red-500 transition p-1">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!isViewer && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Новый способ..."
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (val) {
+                          setLocal(s => ({
+                            ...s,
+                            paymentMethods: [...(s.paymentMethods ?? []), val],
+                          }));
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.querySelector<HTMLInputElement>('[placeholder="Новый способ..."]');
+                      const val = input?.value.trim();
+                      if (val && input) {
+                        setLocal(s => ({
+                          ...s,
+                          paymentMethods: [...(s.paymentMethods ?? []), val],
+                        }));
+                        input.value = '';
+                      }
+                    }}
+                    className="text-[#5B5BD6] border border-[#5B5BD6]/30 rounded-lg px-3 py-1.5 text-sm hover:bg-[#EEF0FF] transition"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

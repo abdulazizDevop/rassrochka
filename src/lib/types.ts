@@ -173,6 +173,7 @@ export interface AppSettings {
   enableSecurityDepartment: boolean;
   printFormat: 'A4' | 'Терминал';
   companyName: string;
+  paymentMethods?: string[];
 }
 
 export interface Tariff {

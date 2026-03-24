@@ -61,6 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enableSecurityDepartment: false,
   printFormat: 'A4',
   companyName: 'AkhmadPay',
+  paymentMethods: ['Наличка', 'Сбербанк', 'Тинькофф'],
 };
 
 function nowStr() {

@@ -129,12 +129,15 @@ export async function GET() {
     const settingsRaw = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
     const numberKeys = new Set(['minFirstPaymentPercent', 'minFirstPaymentAmount', 'minMonths', 'maxMonths', 'daysUntilOverdue']);
     const booleanKeys = new Set(['enableSecurityDepartment']);
+    const jsonKeys = new Set(['paymentMethods']);
     const settings: Record<string, unknown> = {};
     for (const { key, value } of settingsRaw) {
       if (numberKeys.has(key)) {
         settings[key] = Number(value);
       } else if (booleanKeys.has(key)) {
         settings[key] = value === 'true';
+      } else if (jsonKeys.has(key)) {
+        try { settings[key] = JSON.parse(value); } catch { settings[key] = value; }
       } else {
         settings[key] = value;
       }

@@ -1,8 +1,8 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Client } from '@/lib/types';
-import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil } from 'lucide-react';
+import { Client, Contract } from '@/lib/types';
+import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil, User, FileText } from 'lucide-react';
 
 // ── Passport hover preview ──────────────────────────────────────────────────
 function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: React.RefObject<HTMLSpanElement | null> }) {
@@ -47,6 +47,131 @@ function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: R
         )}
       </div>
       <p className="text-xs text-gray-500 text-center py-2">Фото паспорта</p>
+    </div>
+  );
+}
+
+// ── Client profile modal (payment history + debt) ───────────────────────────
+function ClientProfileModal({ client, contracts, ledger, onClose }: {
+  client: Client;
+  contracts: Contract[];
+  ledger: { id: string; date: string; amount: number; operation: string; note: string }[];
+  onClose: () => void;
+}) {
+  const fullName = `${client.lastName} ${client.firstName} ${client.middleName}`.trim();
+  const clientContracts = contracts.filter(c => c.clientId === client.id);
+  const totalDebt = clientContracts.reduce((s, c) => s + c.remainingDebt, 0);
+  const totalPaid = clientContracts.reduce((s, c) => s + (c.cost + c.markup - c.remainingDebt), 0);
+
+  // Get payment entries from ledger for this client
+  const clientPayments = ledger.filter(e =>
+    e.operation === 'Платёж клиента' && (e.note?.includes(fullName) || e.note?.includes(client.phone) || clientContracts.some(c => e.note?.includes(`#${c.number}`)))
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#EEF0FF] flex items-center justify-center">
+              <User size={18} className="text-[#5B5BD6]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">{fullName}</h2>
+              <p className="text-sm text-gray-500">{client.phone}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        <div className="overflow-y-auto p-6 space-y-5">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-green-50 rounded-xl p-4 text-center">
+              <p className="text-xs text-green-600 mb-1">Оплачено</p>
+              <p className="text-lg font-bold text-green-700">{totalPaid.toLocaleString('ru-RU')} ₽</p>
+            </div>
+            <div className="bg-red-50 rounded-xl p-4 text-center">
+              <p className="text-xs text-red-500 mb-1">Остаток долга</p>
+              <p className="text-lg font-bold text-red-600">{totalDebt.toLocaleString('ru-RU')} ₽</p>
+            </div>
+            <div className="bg-[#EEF0FF] rounded-xl p-4 text-center">
+              <p className="text-xs text-[#5B5BD6] mb-1">Договоров</p>
+              <p className="text-lg font-bold text-[#5B5BD6]">{clientContracts.length}</p>
+            </div>
+          </div>
+
+          {/* Contracts */}
+          {clientContracts.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <FileText size={14} className="text-[#5B5BD6]" /> Договоры
+              </h3>
+              <div className="space-y-2">
+                {clientContracts.map(c => (
+                  <div key={c.id} className="border border-gray-100 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-gray-800">Договор #{c.number} — {c.product}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        c.status === 'Погашен' || c.status === 'Досрочно погашен' ? 'bg-green-100 text-green-700' :
+                        c.status === 'Просрочен' ? 'bg-red-100 text-red-700' :
+                        c.status === 'Списан' ? 'bg-gray-100 text-gray-500' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>{c.status}</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-500 mt-2">
+                      <div>Сумма: <span className="font-medium text-gray-700">{c.cost.toLocaleString('ru-RU')} ₽</span></div>
+                      <div>Взнос: <span className="font-medium text-gray-700">{c.firstPayment.toLocaleString('ru-RU')} ₽</span></div>
+                      <div>Ежемес.: <span className="font-medium text-gray-700">{c.monthlyPayment.toLocaleString('ru-RU')} ₽</span></div>
+                      <div>Долг: <span className="font-medium text-red-600">{c.remainingDebt.toLocaleString('ru-RU')} ₽</span></div>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">{c.createdAt} — {c.endDate}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Payment history from ledger */}
+          {clientPayments.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">История платежей</h3>
+              <div className="border border-gray-100 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs text-gray-500">
+                      <th className="text-left px-3 py-2 font-medium">Дата</th>
+                      <th className="text-left px-3 py-2 font-medium">Назначение</th>
+                      <th className="text-right px-3 py-2 font-medium">Сумма</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientPayments.map(p => (
+                      <tr key={p.id} className="border-t border-gray-50">
+                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.date}</td>
+                        <td className="px-3 py-2 text-gray-500 text-xs">{p.note}</td>
+                        <td className="px-3 py-2 text-right text-green-600 font-medium whitespace-nowrap">{p.amount.toLocaleString('ru-RU')} ₽</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {clientContracts.length === 0 && (
+            <p className="text-center text-gray-400 text-sm py-4">У клиента нет договоров</p>
+          )}
+        </div>
+
+        <div className="border-t border-gray-100 px-6 py-4">
+          <button onClick={onClose}
+            className="w-full border border-gray-200 hover:bg-gray-50 rounded-xl py-2.5 text-sm font-medium transition">
+            Закрыть
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -278,12 +403,13 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
 }
 
 // ── Row with hover preview ──────────────────────────────────────────────────
-function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit }: {
+function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit, onProfile }: {
   client: Client;
   isViewer: boolean;
   onManagePhotos: (c: Client) => void;
   onDelete: (id: string) => void;
   onEdit: (c: Client) => void;
+  onProfile: (c: Client) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -293,15 +419,16 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit }: {
   return (
     <>
     <tr className="border-b border-gray-50 hover:bg-gray-50">
-      {/* ФИО with passport preview */}
+      {/* ФИО — click opens profile, hover shows passport */}
       <td className="px-4 py-3">
         <div className="relative inline-block">
           <span
             ref={nameRef}
             className="font-medium text-[#5B5BD6] cursor-pointer underline decoration-dotted underline-offset-2"
+            onClick={() => onProfile(client)}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            onTouchStart={() => setHovered(v => !v)}
+            onTouchStart={() => onProfile(client)}
           >
             {fullName}
           </span>
@@ -373,11 +500,12 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit }: {
 
 // ── Main page ───────────────────────────────────────────────────────────────
 export default function ClientsPage() {
-  const { clients, deleteClient, updateClient, currentUser } = useApp();
+  const { clients, contracts, ledger, deleteClient, updateClient, currentUser } = useApp();
   const isViewer = currentUser?.role === 'viewer';
   const [search, setSearch] = useState('');
   const [passportClient, setPassportClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
+  const [profileClient, setProfileClient] = useState<Client | null>(null);
   const [clientPhotos, setClientPhotos] = useState<Record<string, string[]>>({});
 
   // Load all client photos from server in one request
@@ -425,7 +553,7 @@ export default function ClientsPage() {
     <div className="p-4 md:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Управление клиентами</h1>
-        <p className="text-sm text-gray-500 mt-1">Наведите на имя клиента для просмотра фото паспорта</p>
+        <p className="text-sm text-gray-500 mt-1">Нажмите на имя клиента для просмотра профиля и платежей</p>
       </div>
 
       <div className="mb-5 max-w-full sm:max-w-sm">
@@ -457,6 +585,7 @@ export default function ClientsPage() {
                 onManagePhotos={setPassportClient}
                 onDelete={deleteClient}
                 onEdit={setEditClient}
+                onProfile={setProfileClient}
               />
             ))}
             {filtered.length === 0 && (
@@ -482,6 +611,15 @@ export default function ClientsPage() {
           client={editClient}
           onClose={() => setEditClient(null)}
           onSave={(id, updates) => { updateClient(id, updates); setEditClient(null); }}
+        />
+      )}
+
+      {profileClient && (
+        <ClientProfileModal
+          client={profileClient}
+          contracts={contracts}
+          ledger={ledger}
+          onClose={() => setProfileClient(null)}
         />
       )}
     </div>

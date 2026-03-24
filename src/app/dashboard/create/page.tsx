@@ -1,18 +1,17 @@
 'use client';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Client } from '@/lib/types';
 import { ChevronDown, Download, Plus, Trash2, Search, Calculator, Camera, X, ZoomIn, FileText, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
-const TARIFFS = ['стандарт', 'премиум', 'эконом'];
-const SOURCES = ['Баланс', 'Инвестиции'];
 const ACCOUNTS = ['общий (Доступно: 3 945 563 ₽)'];
 
 export default function CreateContractPage() {
   const router = useRouter();
-  const { clients, products, addContract, addClient, contracts, currentUser, depositAccount, addAuditEntry } = useApp();
+  const { clients, products, accounts: appAccounts, addContract, addClient, contracts, currentUser, depositAccount, addAuditEntry, settings } = useApp();
+  const paymentMethods = settings.paymentMethods ?? ['Наличка', 'Сбербанк', 'Тинькофф'];
   const isViewer = currentUser?.role === 'viewer';
 
   if (isViewer) {
@@ -29,9 +28,14 @@ export default function CreateContractPage() {
   const [cost, setCost] = useState('');
   const [purchaseCost, setPurchaseCost] = useState('');
   const [firstPayment, setFirstPayment] = useState('');
-  const [months, setMonths] = useState(6);
-  const [source, setSource] = useState('Баланс');
-  const [tariff, setTariff] = useState('стандарт');
+  const [months, setMonths] = useState('');
+  const [source, setSource] = useState(paymentMethods[0] ?? '');
+  // Sync source when paymentMethods load from API
+  useEffect(() => {
+    if (paymentMethods.length > 0) {
+      setSource(prev => paymentMethods.includes(prev) ? prev : paymentMethods[0]);
+    }
+  }, [paymentMethods]);
   const [account, setAccount] = useState(ACCOUNTS[0]);
   const [markup, setMarkup] = useState('');
   const [productName, setProductName] = useState('');
@@ -55,18 +59,19 @@ export default function CreateContractPage() {
   const costNum = parseFloat(cost) || 0;
   const firstPaymentNum = parseFloat(firstPayment) || 0;
   const markupNum = parseFloat(markup) || 0;
+  const monthsNum = parseInt(months) || 0;
   const markupAmount = costNum * markupNum / 100;
   const totalWithMarkup = costNum + markupAmount;
   const amountAfterFirst = totalWithMarkup - firstPaymentNum;
-  const monthly = months > 0 ? Math.ceil(amountAfterFirst / months) : 0;
-  const total = firstPaymentNum + monthly * months;
+  const monthly = monthsNum > 0 ? Math.ceil(amountAfterFirst / monthsNum) : 0;
+  const total = firstPaymentNum + monthly * monthsNum;
   const remainingDebt = amountAfterFirst;
 
   const paymentSchedule = useMemo(() => {
     const schedule = [];
     const [d, m, y] = startDate.split('.').map(Number);
     let current = new Date(y, m - 1, d);
-    for (let i = 0; i < months; i++) {
+    for (let i = 0; i < monthsNum; i++) {
       current = new Date(current);
       current.setMonth(current.getMonth() + 1);
       schedule.push({
@@ -76,7 +81,7 @@ export default function CreateContractPage() {
       });
     }
     return schedule;
-  }, [startDate, months, monthly]);
+  }, [startDate, monthsNum, monthly]);
 
   const clientResults = useMemo(() => {
     if (!clientSearch) return [];
@@ -138,9 +143,9 @@ export default function CreateContractPage() {
       purchaseCost: parseFloat(purchaseCost) || 0,
       markup: markupAmount,
       firstPayment: firstPaymentNum,
-      months,
+      months: monthsNum,
       source,
-      tariff,
+      tariff: '',
       account: 'общий',
       startDate,
       payDay,
@@ -210,7 +215,7 @@ export default function CreateContractPage() {
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Количество месяцев <span className="text-red-500">*</span></label>
                 <div className="relative">
-                  <input value={months} onChange={e => setMonths(parseInt(e.target.value) || 1)} type="number" min={1} max={60}
+                  <input value={months} onChange={e => setMonths(e.target.value.replace(/\D/g, ''))} type="text" inputMode="numeric" placeholder="0"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] pr-8" />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col text-gray-300 text-xs leading-none">
                     <span>▲</span><span>▼</span>
@@ -218,21 +223,11 @@ export default function CreateContractPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Источник финансирования</label>
+                <label className="block text-sm text-gray-700 mb-1">Способ оплаты</label>
                 <div className="relative">
                   <select value={source} onChange={e => setSource(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
-                    {SOURCES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Тариф <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <select value={tariff} onChange={e => setTariff(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
-                    {TARIFFS.map(t => <option key={t}>{t}</option>)}
+                    {paymentMethods.map(s => <option key={s}>{s}</option>)}
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
@@ -479,7 +474,7 @@ export default function CreateContractPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/80">Количество месяцев</span>
-                <span className="font-medium">{months}</span>
+                <span className="font-medium">{monthsNum}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/80">Первый взнос</span>
@@ -531,7 +526,7 @@ export default function CreateContractPage() {
                       product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
                       remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
                       cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-                      months, source, tariff, account: 'общий', startDate, payDay, comment, approved: false,
+                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay, comment, approved: false,
                     };
                     await downloadContractPdf(draftContract, selectedClient);
                   }}
@@ -548,7 +543,7 @@ export default function CreateContractPage() {
                       product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
                       remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
                       cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-                      months, source, tariff, account: 'общий', startDate, payDay, comment, approved: false,
+                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay, comment, approved: false,
                     };
                     downloadContractExcel(draftContract, selectedClient);
                   }}

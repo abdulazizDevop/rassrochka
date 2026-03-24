@@ -83,6 +83,24 @@ export default function BalancePage() {
   const [trComment, setTrComment] = useState('');
   const [trMsg, setTrMsg] = useState('');
 
+  // Expense modal
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expAccountId, setExpAccountId] = useState(accounts[0]?.id ?? '');
+  const [expAmount, setExpAmount] = useState('');
+  const [expNote, setExpNote] = useState('');
+  const [expMsg, setExpMsg] = useState('');
+
+  function handleAddExpense() {
+    setExpMsg('');
+    const amt = parseInt(expAmount, 10);
+    if (!amt || amt <= 0) { setExpMsg('Введите корректную сумму'); return; }
+    if (!expNote.trim()) { setExpMsg('Введите назначение расхода'); return; }
+    const ok = withdrawAccount(expAccountId, amt, expNote.trim(), true);
+    if (!ok) { setExpMsg('Недостаточно средств'); return; }
+    setExpAmount(''); setExpNote('');
+    setShowExpenseModal(false);
+  }
+
   // Ledger tab state
   const [ledgerAccountId, setLedgerAccountId] = useState('all');
   const [ledgerFromDate, setLedgerFromDate] = useState('');
@@ -265,29 +283,64 @@ export default function BalancePage() {
               </div>
             </div>
 
-            {/* Right panel */}
+            {/* Right panel — operational expenses */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
-                  <Wallet size={18} className="text-white" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
+                    <Wallet size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">Операционные расходы</p>
+                    <p className="text-xs text-gray-400">{new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</p>
+                  </div>
                 </div>
+                {!isViewer && (
+                  <button onClick={() => setShowExpenseModal(true)}
+                    className="flex items-center gap-1 text-sm text-indigo-600 border border-indigo-200 rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 transition">
+                    <Plus size={14} /> Добавить
+                  </button>
+                )}
               </div>
-              <p className="font-semibold text-gray-800">Операционные расходы</p>
-              <p className="text-xs text-gray-400 mb-4">Март 2026</p>
-              <div className="h-24 flex items-end gap-1 mb-3">
-                {[2,3,2,4,3,5,4,6,5,7,6,5,8,7,6,9,8,7,6,5,4,5,6,7,8,7,6,5,4,3].map((v, i) => (
-                  <div key={i} className="flex-1 bg-indigo-100 rounded-sm" style={{ height: `${v * 8}px` }} />
-                ))}
-              </div>
-              <div className="flex justify-between text-xs text-gray-400 mb-4">
-                <span>февр. 2026</span><span>март 2026</span>
-              </div>
-              <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">ИТОГО</p>
-                <p className="text-xl font-bold text-gray-900">0 ₽</p>
-                <p className="text-xs text-gray-400 mt-3 uppercase tracking-wide">ДЕТАЛИЗАЦИЯ</p>
-                <p className="text-xs text-gray-400 mt-1">Нет операционных расходов</p>
-              </div>
+
+              {(() => {
+                const opExpenses = ledger.filter(e => e.isOperationalExpense);
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                const thisMonthExpenses = opExpenses.filter(e => {
+                  const [d, m, y] = (e.date || '').split('.');
+                  return parseInt(m) - 1 === currentMonth && parseInt(y) === currentYear;
+                });
+                const totalExpenses = thisMonthExpenses.reduce((s, e) => s + e.amount, 0);
+
+                return (
+                  <>
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">ИТОГО ЗА МЕСЯЦ</p>
+                      <p className="text-xl font-bold text-gray-900">{fmt(totalExpenses)}</p>
+                    </div>
+                    {thisMonthExpenses.length > 0 ? (
+                      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                        <p className="text-xs text-gray-400 uppercase tracking-wide">ДЕТАЛИЗАЦИЯ</p>
+                        {thisMonthExpenses.map(e => (
+                          <div key={e.id} className="flex justify-between items-start text-sm border-b border-gray-50 pb-1.5">
+                            <div>
+                              <p className="text-gray-700 text-xs">{e.note}</p>
+                              <p className="text-gray-400 text-xs">{e.date} · {e.accountName}</p>
+                            </div>
+                            <span className="text-red-500 font-medium text-xs whitespace-nowrap ml-2">{fmt(e.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-400 uppercase tracking-wide">ДЕТАЛИЗАЦИЯ</p>
+                        <p className="text-xs text-gray-400 mt-1">Нет операционных расходов</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -579,6 +632,56 @@ export default function BalancePage() {
                 className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 transition"
               >
                 Создать счёт
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === ADD EXPENSE MODAL === */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-gray-900">Добавить операционный расход</h2>
+              <button onClick={() => { setShowExpenseModal(false); setExpMsg(''); }} className="text-gray-400 hover:text-gray-600 transition">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm text-gray-600 mb-1.5">Счёт списания</label>
+              <div className="relative">
+                <select value={expAccountId} onChange={e => setExpAccountId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 pr-8 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({fmt(a.balance)})</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm text-gray-600 mb-1.5">Сумма</label>
+              <div className="flex">
+                <input type="number" min="1" value={expAmount} onChange={e => setExpAmount(e.target.value)} placeholder="0" className="flex-1 border border-gray-200 border-r-0 rounded-l-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <span className="border border-gray-200 border-l-0 rounded-r-lg px-3 py-2.5 text-sm text-gray-400 bg-gray-50">₽</span>
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm text-gray-600 mb-1.5">Назначение <span className="text-red-400">*</span></label>
+              <textarea value={expNote} onChange={e => setExpNote(e.target.value)} placeholder="Например: Аренда офиса, зарплата, реклама..." rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+            </div>
+
+            {expMsg && <p className={`text-xs mb-3 px-3 py-2 rounded-lg ${expMsg.includes('Недост') || expMsg.includes('корр') || expMsg.includes('назнач') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{expMsg}</p>}
+
+            <div className="flex gap-3">
+              <button onClick={() => { setShowExpenseModal(false); setExpMsg(''); }}
+                className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition">
+                Отмена
+              </button>
+              <button onClick={handleAddExpense}
+                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 transition">
+                <Minus size={15} /> Списать расход
               </button>
             </div>
           </div>

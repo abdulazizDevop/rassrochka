@@ -7,7 +7,7 @@ export async function PATCH(req: NextRequest) {
     const db = getDb();
     const stmt = db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`);
     for (const [key, value] of Object.entries(body)) {
-      stmt.run(key, String(value));
+      stmt.run(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

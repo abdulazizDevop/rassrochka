@@ -17,7 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUSES: ContractStatus[] = ['В процессе', 'Погашен', 'Досрочно погашен', 'Просрочен', 'Списан', 'На проверке'];
 const PAYMENT_STATUSES = ['Погашен', 'Не оплачено', 'Оплачено', 'Новый договор'];
-const SOURCES = ['Баланс', 'Инвестиции'];
+const DEFAULT_SOURCES = ['Наличка', 'Сбербанк', 'Тинькофф'];
 
 type Column = { key: string; label: string; visible: boolean };
 
@@ -96,7 +96,8 @@ function LabeledSelect({
 }
 
 export default function ContractsPage() {
-  const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry } = useApp();
+  const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry, settings } = useApp();
+  const SOURCES = settings.paymentMethods ?? DEFAULT_SOURCES;
   const isViewer = currentUser?.role === 'viewer';
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
