@@ -8,6 +8,32 @@ import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
 const ACCOUNTS = ['общий (Доступно: 3 945 563 ₽)'];
 
+function formatDate(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length === 0) return '';
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+}
+
+function formatRuPhone(value: string): string {
+  // Strip everything except digits
+  const digits = value.replace(/\D/g, '');
+  // Ensure starts with 7
+  let d = digits;
+  if (d.startsWith('8')) d = '7' + d.slice(1);
+  if (!d.startsWith('7') && d.length > 0) d = '7' + d;
+  // Limit to 11 digits (7 + 10)
+  d = d.slice(0, 11);
+  // Format: +7 (XXX) XXX-XX-XX
+  if (d.length === 0) return '';
+  if (d.length <= 1) return '+7';
+  if (d.length <= 4) return `+7 (${d.slice(1)}`;
+  if (d.length <= 7) return `+7 (${d.slice(1, 4)}) ${d.slice(4)}`;
+  if (d.length <= 9) return `+7 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+  return `+7 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
+}
+
 export default function CreateContractPage() {
   const router = useRouter();
   const { clients, products, accounts: appAccounts, addContract, addClient, contracts, currentUser, depositAccount, addAuditEntry, settings } = useApp();
@@ -39,8 +65,8 @@ export default function CreateContractPage() {
   const [account, setAccount] = useState(ACCOUNTS[0]);
   const [markup, setMarkup] = useState('');
   const [productName, setProductName] = useState('');
-  const [startDate, setStartDate] = useState(new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.'));
-  const [payDay, setPayDay] = useState(5);
+  const [startDate, setStartDate] = useState('');
+  const [payDay, setPayDay] = useState('');
   const [comment, setComment] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -60,6 +86,7 @@ export default function CreateContractPage() {
   const firstPaymentNum = parseFloat(firstPayment) || 0;
   const markupNum = parseFloat(markup) || 0;
   const monthsNum = parseInt(months) || 0;
+  const payDayNum = parseInt(payDay) || 1;
   const markupAmount = costNum * markupNum / 100;
   const totalWithMarkup = costNum + markupAmount;
   const amountAfterFirst = totalWithMarkup - firstPaymentNum;
@@ -148,7 +175,7 @@ export default function CreateContractPage() {
       tariff: '',
       account: 'общий',
       startDate,
-      payDay,
+      payDay: payDayNum,
       comment,
       approved: false,
     };
@@ -292,6 +319,19 @@ export default function CreateContractPage() {
               </div>
             )}
 
+            {/* Product name when existing client selected */}
+            {selectedClient && (
+              <div className="mb-3">
+                <label className="block text-sm text-gray-700 mb-1">Название товара <span className="text-red-500">*</span></label>
+                <input
+                  value={productName}
+                  onChange={e => setProductName(e.target.value)}
+                  placeholder="Введите название товара"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+                />
+              </div>
+            )}
+
             {showNewClient ? (
               <div className="border border-gray-200 rounded-lg p-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -301,8 +341,19 @@ export default function CreateContractPage() {
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
                   <input value={newClientMiddle} onChange={e => setNewClientMiddle(e.target.value)} placeholder="Отчество"
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
-                  <input value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} placeholder="Телефон *"
+                  <input value={newClientPhone} onChange={e => setNewClientPhone(formatRuPhone(e.target.value))} placeholder="+7 (___) ___-__-__"
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+                </div>
+
+                {/* Product name - right after phone */}
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Название товара <span className="text-red-500">*</span></label>
+                  <input
+                    value={productName}
+                    onChange={e => setProductName(e.target.value)}
+                    placeholder="Введите название товара"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+                  />
                 </div>
 
                 {/* Passport photos */}
@@ -376,47 +427,24 @@ export default function CreateContractPage() {
             )}
           </div>
 
-          {/* Products section */}
-          <div className="bg-white rounded-xl p-6 border border-gray-100">
-            <h2 className="flex items-center gap-2 font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">
-              <span className="text-[#5B5BD6]">🛒</span> Товары<span className="text-red-500">*</span>
-            </h2>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">Название товара</label>
-              <div className="flex gap-2">
-                <input
-                  value={productName}
-                  onChange={e => setProductName(e.target.value)}
-                  placeholder="Введите название или выберите товар"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
-                />
-                <button className="text-red-400 hover:text-red-600">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-              <button className="flex items-center gap-2 border border-[#5B5BD6] text-[#5B5BD6] rounded-lg px-4 py-2 text-sm hover:bg-[#EEF0FF] transition mt-3">
-                <Plus size={16} /> Добавить позицию
-              </button>
-            </div>
-          </div>
-
           {/* Dates */}
           <div className="bg-white rounded-xl p-6 border border-gray-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Дата начала договора</label>
-                <input value={startDate} onChange={e => setStartDate(e.target.value)}
+                <input value={startDate} onChange={e => setStartDate(formatDate(e.target.value))}
+                  placeholder="ДД.ММ.ГГГГ" type="text" inputMode="numeric"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
               </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Число оплаты</label>
-                <div className="relative">
-                  <input value={payDay} onChange={e => setPayDay(parseInt(e.target.value) || 1)} type="number" min={1} max={31}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] pr-8" />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col text-gray-300 text-xs leading-none">
-                    <span>▲</span><span>▼</span>
-                  </span>
-                </div>
+                <input value={payDay} onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '');
+                  const n = parseInt(v);
+                  if (v === '') setPayDay('');
+                  else if (n >= 1 && n <= 31) setPayDay(v);
+                }} type="text" inputMode="numeric" placeholder="1"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
               </div>
             </div>
           </div>
@@ -526,7 +554,7 @@ export default function CreateContractPage() {
                       product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
                       remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
                       cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay, comment, approved: false,
+                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
                     };
                     await downloadContractPdf(draftContract, selectedClient);
                   }}
@@ -543,7 +571,7 @@ export default function CreateContractPage() {
                       product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
                       remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
                       cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay, comment, approved: false,
+                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
                     };
                     downloadContractExcel(draftContract, selectedClient);
                   }}
