@@ -60,6 +60,19 @@ function ClientProfileModal({ client, contracts, ledger, onClose }: {
 }) {
   const fullName = `${client.lastName} ${client.firstName} ${client.middleName}`.trim();
   const clientContracts = contracts.filter(c => c.clientId === client.id);
+  const [passportPhotos, setPassportPhotos] = useState<{ id: string; url: string }[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(true);
+  const [photoLightbox, setPhotoLightbox] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/upload?clientId=${encodeURIComponent(client.id)}`)
+      .then(r => r.json())
+      .then((data: { photos: { id: string; url: string }[] }) => {
+        if (data.photos?.length > 0) setPassportPhotos(data.photos);
+      })
+      .catch(() => {})
+      .finally(() => setPhotosLoading(false));
+  }, [client.id]);
   const totalDebt = clientContracts.reduce((s, c) => s + c.remainingDebt, 0);
   const totalPaid = clientContracts.reduce((s, c) => s + (c.cost + c.markup - c.remainingDebt), 0);
 
@@ -163,7 +176,53 @@ function ClientProfileModal({ client, contracts, ledger, onClose }: {
           {clientContracts.length === 0 && (
             <p className="text-center text-gray-400 text-sm py-4">У клиента нет договоров</p>
           )}
+
+          {/* Passport photos */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Camera size={14} className="text-[#5B5BD6]" /> Фото паспорта
+            </h3>
+            {photosLoading ? (
+              <p className="text-sm text-gray-400 text-center py-4">Загрузка фото...</p>
+            ) : passportPhotos.length > 0 ? (
+              <div className="grid grid-cols-3 gap-3">
+                {passportPhotos.map((photo, i) => (
+                  <div key={photo.id} className="relative group rounded-lg overflow-hidden border border-gray-100 aspect-[4/3] cursor-pointer"
+                    onClick={() => setPhotoLightbox(i)}>
+                    <img src={photo.url} alt={`Паспорт ${i + 1}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <ZoomIn size={18} className="text-white drop-shadow" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-3 bg-gray-50 rounded-lg">Фото не загружены</p>
+            )}
+          </div>
         </div>
+
+        {/* Photo lightbox */}
+        {photoLightbox !== null && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90" onClick={() => setPhotoLightbox(null)}>
+            <img src={passportPhotos[photoLightbox]?.url} alt="Паспорт" className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+            <button className="absolute top-4 right-4 text-white bg-white/20 rounded-full p-2 hover:bg-white/40" onClick={() => setPhotoLightbox(null)}>
+              <X size={20} />
+            </button>
+            {passportPhotos.length > 1 && (
+              <>
+                <button className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
+                  onClick={e => { e.stopPropagation(); setPhotoLightbox(i => ((i ?? 0) - 1 + passportPhotos.length) % passportPhotos.length); }}>
+                  <ChevronLeft size={22} />
+                </button>
+                <button className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
+                  onClick={e => { e.stopPropagation(); setPhotoLightbox(i => ((i ?? 0) + 1) % passportPhotos.length); }}>
+                  <ChevronRight size={22} />
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="border-t border-gray-100 px-6 py-4">
           <button onClick={onClose}
@@ -246,13 +305,12 @@ function EditClientModal({ client, onClose, onSave }: {
 }
 
 // ── Passport manage modal ───────────────────────────────────────────────────
-function PassportModal({ client, onClose, onSave, isViewer }: {
+function PassportModal({ client, onClose, isViewer }: {
   client: Client;
   onClose: () => void;
-  onSave: (photos: string[]) => void;
   isViewer: boolean;
 }) {
-  const [photos, setPhotos] = useState<string[]>(client.passportPhotos ?? []);
+  const [photos, setPhotos] = useState<{ id: string; url: string }[]>([]);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -266,7 +324,7 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
       .then(r => r.json())
       .then((data: { photos: { id: string; url: string }[] }) => {
         if (data.photos?.length > 0) {
-          setPhotos(data.photos.map(p => p.url));
+          setPhotos(data.photos);
         }
       })
       .catch(() => {})
@@ -286,26 +344,26 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (res.ok) {
         const data = await res.json() as { photos: { id: string; url: string }[] };
-        setPhotos(prev => [...prev, ...data.photos.map(p => p.url)]);
+        setPhotos(prev => [...prev, ...data.photos]);
       }
-    } catch {
-      allowed.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = e => { setPhotos(prev => [...prev, e.target?.result as string]); };
-        reader.readAsDataURL(file);
-      });
-    } finally {
+    } catch {} finally {
       setUploading(false);
     }
   };
 
-  const removePhoto = (i: number) => setPhotos(prev => prev.filter((_, idx) => idx !== i));
+  const removePhoto = async (i: number) => {
+    const photo = photos[i];
+    if (photo.id) {
+      try { await fetch(`/api/upload?id=${encodeURIComponent(photo.id)}`, { method: 'DELETE' }); } catch {}
+    }
+    setPhotos(prev => prev.filter((_, idx) => idx !== i));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       {lightbox !== null ? (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90" onClick={() => setLightbox(null)}>
-          <img src={photos[lightbox]} alt="Паспорт" className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90" onClick={() => setLightbox(null)}>
+          <img src={photos[lightbox]?.url} alt="Паспорт" className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
           <button className="absolute top-4 right-4 text-white bg-white/20 rounded-full p-2 hover:bg-white/40" onClick={() => setLightbox(null)}>
             <X size={20} />
           </button>
@@ -363,9 +421,9 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
             <div className="flex items-center justify-center py-10 text-gray-400 text-sm">Загрузка фото...</div>
           ) : photos.length > 0 ? (
             <div className="grid grid-cols-3 gap-3 mb-5">
-              {photos.map((src, i) => (
-                <div key={i} className="relative group rounded-lg overflow-hidden border border-gray-100 aspect-[4/3]">
-                  <img src={src} alt={`Паспорт ${i + 1}`} className="w-full h-full object-cover" />
+              {photos.map((photo, i) => (
+                <div key={photo.id} className="relative group rounded-lg overflow-hidden border border-gray-100 aspect-[4/3]">
+                  <img src={photo.url} alt={`Паспорт ${i + 1}`} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                     <button onClick={() => setLightbox(i)} className="bg-white/90 rounded-full p-1.5 hover:bg-white">
                       <ZoomIn size={14} className="text-gray-700" />
@@ -385,15 +443,9 @@ function PassportModal({ client, onClose, onSave, isViewer }: {
           )}
 
           <div className="flex gap-3">
-            {!isViewer && (
-              <button onClick={() => onSave(photos)}
-                className="flex-1 bg-[#5B5BD6] hover:bg-[#4a4ac4] text-white rounded-xl py-2.5 text-sm font-semibold transition">
-                Сохранить
-              </button>
-            )}
             <button onClick={onClose}
               className="flex-1 border border-gray-200 hover:bg-gray-50 rounded-xl py-2.5 text-sm font-medium transition">
-              {isViewer ? 'Закрыть' : 'Отмена'}
+              Закрыть
             </button>
           </div>
         </div>
@@ -542,11 +594,20 @@ export default function ClientsPage() {
     );
   }, [clientsWithPhotos, search]);
 
-  const handleSavePhotos = (photos: string[]) => {
-    if (!passportClient) return;
-    updateClient(passportClient.id, { passportPhotos: photos });
-    setClientPhotos(prev => ({ ...prev, [passportClient.id]: photos }));
-    setPassportClient(null);
+  // Refresh client photos after passport modal closes
+  const refreshPhotos = () => {
+    fetch('/api/upload')
+      .then(r => r.json())
+      .then((data: { byClient: Record<string, { id: string; url: string }[]> }) => {
+        if (data.byClient) {
+          const map: Record<string, string[]> = {};
+          for (const [cid, photos] of Object.entries(data.byClient)) {
+            map[cid] = photos.map(p => p.url);
+          }
+          setClientPhotos(map);
+        }
+      })
+      .catch(() => {});
   };
 
   return (
@@ -600,8 +661,7 @@ export default function ClientsPage() {
       {passportClient && (
         <PassportModal
           client={passportClient}
-          onClose={() => setPassportClient(null)}
-          onSave={handleSavePhotos}
+          onClose={() => { setPassportClient(null); refreshPhotos(); }}
           isViewer={isViewer}
         />
       )}
