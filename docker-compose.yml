@@ -7,6 +7,7 @@ services:
     volumes:
       - app_data:/app/data
       - app_uploads:/app/public/uploads
+      - app_backups:/app/backups
     environment:
       - NODE_ENV=production
     healthcheck:
@@ -20,4 +21,6 @@ volumes:
   app_data:
     driver: local
   app_uploads:
+    driver: local
+  app_backups:
     driver: local
