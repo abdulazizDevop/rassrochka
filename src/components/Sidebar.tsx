@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import {
   FileText, PlusCircle, ShieldCheck, Users,
-  Wallet, TrendingUp, BarChart2,
+  Wallet, TrendingUp, BarChart2, Package,
   ClipboardList, Archive, Settings, LogOut
 } from 'lucide-react';
 
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/dashboard/investments', label: 'Инвестиции', icon: TrendingUp },
   { href: '/dashboard/analytics', label: 'Аналитика', icon: BarChart2 },
 
+  { href: '/dashboard/products', label: 'Продукты', icon: Package },
   { href: '/dashboard/audit', label: 'Аудит', icon: ClipboardList },
   { href: '/dashboard/backups', label: 'Резервные копии', icon: Archive },
   { href: '/dashboard/settings', label: 'Настройки', icon: Settings },
