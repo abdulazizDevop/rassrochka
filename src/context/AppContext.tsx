@@ -46,6 +46,8 @@ interface AppContextType {
   addTariff: (tariff: Tariff) => void;
   updateTariff: (id: string, updates: Partial<Tariff>) => void;
   deleteTariff: (id: string) => void;
+  addProduct: (product: Product) => void;
+  deleteProduct: (id: string) => void;
   createBackup: () => void;
   deleteBackup: (id: string) => void;
 }
@@ -761,6 +763,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetch(`/api/tariffs?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
   }, []);
 
+  const addProduct = useCallback((product: Product) => {
+    setProducts(prev => [...prev, product]);
+    fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) }).catch(() => {});
+  }, []);
+
+  const deleteProduct = useCallback((id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+    fetch(`/api/products?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+  }, []);
+
   const createBackup = useCallback(() => {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -789,6 +801,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addInvestor, deleteInvestor,
       addAuditEntry,
       updateSettings, addTariff, updateTariff, deleteTariff,
+      addProduct, deleteProduct,
       createBackup, deleteBackup,
     }}>
       {children}
