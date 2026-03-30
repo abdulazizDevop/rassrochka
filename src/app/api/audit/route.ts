@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const db = getDb();
     db.prepare(
       `INSERT INTO audit_log (id, timestamp, employee, action, section, entity, details) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, timestamp, employee, action, section, entity, details);
+    ).run(id, timestamp, employee || '', action || '', section || '', entity || '', details || '');
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });

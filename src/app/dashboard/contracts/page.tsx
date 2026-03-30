@@ -15,8 +15,8 @@ const STATUS_COLORS: Record<string, string> = {
   'На проверке': 'text-yellow-500',
 };
 
-const STATUSES: ContractStatus[] = ['В процессе', 'Погашен', 'Досрочно погашен', 'Просрочен', 'Списан', 'На проверке'];
-const PAYMENT_STATUSES = ['Погашен', 'Не оплачено', 'Оплачено', 'Новый договор'];
+const DEFAULT_STATUSES = ['В процессе', 'Погашен', 'Досрочно погашен', 'Просрочен', 'Списан', 'На проверке'];
+const DEFAULT_PAYMENT_STATUSES = ['Погашен', 'Не оплачено', 'Оплачено', 'Новый договор'];
 const DEFAULT_SOURCES = ['Наличка', 'Сбербанк', 'Тинькофф'];
 
 type Column = { key: string; label: string; visible: boolean };
@@ -60,10 +60,18 @@ function getDaysUntilPayment(c: Contract): number {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const payDay = c.payDay || 1;
-  // Next payment date: this month's payDay or next month's
   let next = new Date(now.getFullYear(), now.getMonth(), payDay);
+  // If payDay already passed this month, next payment is next month
   if (next < today) next = new Date(now.getFullYear(), now.getMonth() + 1, payDay);
   return Math.floor((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** Is the contract's payment overdue (payDay passed, still has debt) */
+function isPaymentOverdue(c: Contract): boolean {
+  const now = new Date();
+  const todayDay = now.getDate();
+  const payDay = c.payDay || 1;
+  return todayDay > payDay && c.remainingDebt > 0;
 }
 
 function LabeledSelect({
@@ -197,40 +205,43 @@ function UpcomingCard({ contract, onPay, isViewer }: {
   isViewer: boolean;
 }) {
   const days = getDaysUntilPayment(contract);
-  const isOverdue = contract.status === 'Просрочен';
+  const isOverdue = contract.status === 'Просрочен' || isPaymentOverdue(contract);
   const urgent = days <= 1 || isOverdue;
 
+  const badgeText = isOverdue
+    ? (contract.status === 'Просрочен' ? 'Просрочен' : 'Не оплачен')
+    : days === 0 ? 'Сегодня' : days === 1 ? 'Завтра' : `Через ${days} дн.`;
+
   return (
-    <div className={`bg-white rounded-xl border p-4 ${urgent ? 'border-red-200 bg-red-50/30' : 'border-orange-200 bg-orange-50/30'}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <p className="font-semibold text-gray-900">#{contract.number} — {contract.product}</p>
-          <p className="text-sm text-gray-500">{contract.clientName}</p>
+    <div className={`bg-white rounded-xl border p-4 ${urgent ? 'border-red-200' : 'border-orange-200'}`}>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-900 truncate">#{contract.number} — {contract.product || 'Без товара'}</p>
+          <p className="text-sm text-gray-500 truncate">{contract.clientName}</p>
+          <p className="text-xs text-gray-400">{contract.phone}</p>
         </div>
-        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-          isOverdue ? 'bg-red-100 text-red-600' :
-          days <= 1 ? 'bg-red-100 text-red-600' :
-          'bg-orange-100 text-orange-600'
+        <span className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${
+          isOverdue ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
         }`}>
-          {isOverdue ? 'Просрочен' : days === 0 ? 'Сегодня' : days === 1 ? 'Завтра' : `Через ${days} дн.`}
+          {badgeText}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-        <div>
-          <span className="text-gray-500">Платеж:</span>
-          <span className="font-medium ml-1">{contract.monthlyPayment.toLocaleString('ru-RU')} ₽</span>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm mb-4">
+        <div className="flex justify-between">
+          <span className="text-gray-400">Платеж</span>
+          <span className="font-medium text-gray-800">{contract.monthlyPayment.toLocaleString('ru-RU')} ₽</span>
         </div>
-        <div>
-          <span className="text-gray-500">Долг:</span>
-          <span className="font-medium text-red-500 ml-1">{contract.remainingDebt.toLocaleString('ru-RU')} ₽</span>
+        <div className="flex justify-between">
+          <span className="text-gray-400">Долг</span>
+          <span className="font-medium text-red-500">{contract.remainingDebt.toLocaleString('ru-RU')} ₽</span>
         </div>
-        <div>
-          <span className="text-gray-500">Телефон:</span>
-          <span className="ml-1">{contract.phone}</span>
+        <div className="flex justify-between">
+          <span className="text-gray-400">День оплаты</span>
+          <span className="font-medium text-gray-800">{contract.payDay}-е число</span>
         </div>
-        <div>
-          <span className="text-gray-500">День оплаты:</span>
-          <span className="ml-1">{contract.payDay}</span>
+        <div className="flex justify-between">
+          <span className="text-gray-400">Статус</span>
+          <span className={`font-medium ${STATUS_COLORS[contract.status] || 'text-gray-700'}`}>{contract.status}</span>
         </div>
       </div>
       <div className="flex gap-2">
@@ -256,6 +267,8 @@ function UpcomingCard({ contract, onPay, isViewer }: {
 export default function ContractsPage() {
   const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry, settings } = useApp();
   const SOURCES = settings.paymentMethods ?? DEFAULT_SOURCES;
+  const STATUSES = settings.contractStatuses ?? DEFAULT_STATUSES;
+  const PAYMENT_STATUSES = settings.paymentStatuses ?? DEFAULT_PAYMENT_STATUSES;
   const isViewer = currentUser?.role === 'viewer';
 
   // Tab state
@@ -284,15 +297,26 @@ export default function ContractsPage() {
   const toggleColumn = (key: string) => setColumns(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
   const handleSort = (key: string) => { if (sortKey === key) setSortAsc(a => !a); else { setSortKey(key); setSortAsc(true); } };
 
-  // Upcoming payments: contracts with <=3 days until payment or overdue, and still have debt
+  // Upcoming payments: active contracts with debt where payDay is within 3 days, overdue, or payDay already passed this month
   const upcomingContracts = useMemo(() => {
     return contracts.filter(c => {
       if (c.remainingDebt <= 0) return false;
       if (c.status === 'Погашен' || c.status === 'Досрочно погашен' || c.status === 'Списан') return false;
+      // Always show overdue contracts
       if (c.status === 'Просрочен') return true;
+      // Show if payDay already passed this month (payment not yet made)
+      if (isPaymentOverdue(c)) return true;
+      // Show if payDay is within 3 days
       const days = getDaysUntilPayment(c);
       return days <= 3;
-    }).sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+    }).sort((a, b) => {
+      // Overdue first, then by days until payment
+      const aOverdue = a.status === 'Просрочен' || isPaymentOverdue(a);
+      const bOverdue = b.status === 'Просрочен' || isPaymentOverdue(b);
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return 1;
+      return getDaysUntilPayment(a) - getDaysUntilPayment(b);
+    });
   }, [contracts]);
 
   const filtered = useMemo(() => {

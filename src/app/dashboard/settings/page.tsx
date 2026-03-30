@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { DollarSign, Paperclip, List, Lock, Printer, Plus, Trash2, Check, Info, Users, Eye, EyeOff, Download, FileText, UserPlus, Pencil } from 'lucide-react';
+import { DollarSign, Paperclip, List, Lock, Printer, Plus, Trash2, Check, Info, Users, Eye, EyeOff, Download, FileText, UserPlus, Pencil, CreditCard } from 'lucide-react';
 
 type Template = { id: string; filename: string; original_name: string; url: string; created_at: string };
 
@@ -468,6 +468,100 @@ export default function SettingsPage() {
                     }}
                     className="text-[#5B5BD6] border border-[#5B5BD6]/30 rounded-lg px-3 py-1.5 text-sm hover:bg-[#EEF0FF] transition"
                   >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Contract Statuses */}
+            <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <FileText size={18} className="text-blue-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Статусы договоров</p>
+                  <p className="text-xs text-gray-400">Управление статусами договоров</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-3">
+                {(local.contractStatuses ?? []).map((status, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm text-gray-700 border border-gray-100 rounded-lg px-3 py-1.5">{status}</span>
+                    {!isViewer && (
+                      <button onClick={() => setLocal(s => ({
+                        ...s,
+                        contractStatuses: (s.contractStatuses ?? []).filter((_, idx) => idx !== i),
+                      }))} className="text-gray-300 hover:text-red-500 transition p-1">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!isViewer && (
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Новый статус..."
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (val) { setLocal(s => ({ ...s, contractStatuses: [...(s.contractStatuses ?? []), val] })); (e.target as HTMLInputElement).value = ''; }
+                      }
+                    }} />
+                  <button onClick={() => {
+                    const input = document.querySelector<HTMLInputElement>('[placeholder="Новый статус..."]');
+                    const val = input?.value.trim();
+                    if (val && input) { setLocal(s => ({ ...s, contractStatuses: [...(s.contractStatuses ?? []), val] })); input.value = ''; }
+                  }} className="text-[#5B5BD6] border border-[#5B5BD6]/30 rounded-lg px-3 py-1.5 text-sm hover:bg-[#EEF0FF] transition">
+                    <Plus size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Payment Statuses */}
+            <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
+                  <CreditCard size={18} className="text-purple-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Статусы платежей</p>
+                  <p className="text-xs text-gray-400">Управление статусами платежей</p>
+                </div>
+              </div>
+              <div className="space-y-2 mb-3">
+                {(local.paymentStatuses ?? []).map((status, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm text-gray-700 border border-gray-100 rounded-lg px-3 py-1.5">{status}</span>
+                    {!isViewer && (
+                      <button onClick={() => setLocal(s => ({
+                        ...s,
+                        paymentStatuses: (s.paymentStatuses ?? []).filter((_, idx) => idx !== i),
+                      }))} className="text-gray-300 hover:text-red-500 transition p-1">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!isViewer && (
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Новый статус платежа..."
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5B5BD6]/30"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (val) { setLocal(s => ({ ...s, paymentStatuses: [...(s.paymentStatuses ?? []), val] })); (e.target as HTMLInputElement).value = ''; }
+                      }
+                    }} />
+                  <button onClick={() => {
+                    const input = document.querySelector<HTMLInputElement>('[placeholder="Новый статус платежа..."]');
+                    const val = input?.value.trim();
+                    if (val && input) { setLocal(s => ({ ...s, paymentStatuses: [...(s.paymentStatuses ?? []), val] })); input.value = ''; }
+                  }} className="text-[#5B5BD6] border border-[#5B5BD6]/30 rounded-lg px-3 py-1.5 text-sm hover:bg-[#EEF0FF] transition">
                     <Plus size={14} />
                   </button>
                 </div>

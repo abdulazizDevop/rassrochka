@@ -1,16 +1,5 @@
-export type ContractStatus =
-  | 'В процессе'
-  | 'Погашен'
-  | 'Досрочно погашен'
-  | 'Просрочен'
-  | 'Списан'
-  | 'На проверке';
-
-export type PaymentStatus =
-  | 'Погашен'
-  | 'Не оплачено'
-  | 'Оплачено'
-  | 'Новый договор';
+export type ContractStatus = string;
+export type PaymentStatus = string;
 
 export interface Client {
   id: string;
@@ -174,6 +163,8 @@ export interface AppSettings {
   printFormat: 'A4' | 'Терминал';
   companyName: string;
   paymentMethods?: string[];
+  contractStatuses?: string[];
+  paymentStatuses?: string[];
 }
 
 export interface Tariff {

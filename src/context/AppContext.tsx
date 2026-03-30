@@ -64,6 +64,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   printFormat: 'A4',
   companyName: 'AkhmadPay',
   paymentMethods: ['Наличка', 'Сбербанк', 'Тинькофф'],
+  contractStatuses: ['В процессе', 'Погашен', 'Досрочно погашен', 'Просрочен', 'Списан', 'На проверке'],
+  paymentStatuses: ['Погашен', 'Не оплачено', 'Оплачено', 'Новый договор'],
 };
 
 function nowStr() {
