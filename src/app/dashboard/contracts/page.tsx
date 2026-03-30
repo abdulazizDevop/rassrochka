@@ -66,12 +66,17 @@ function getDaysUntilPayment(c: Contract): number {
   return Math.floor((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/** Is the contract's payment overdue (payDay passed, still has debt) */
+/** Is the contract's payment overdue (payDay passed this month, or endDate already passed) */
 function isPaymentOverdue(c: Contract): boolean {
+  if (c.remainingDebt <= 0) return false;
   const now = new Date();
-  const todayDay = now.getDate();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // If contract endDate has passed — definitely overdue
+  const end = parseRuDate(c.endDate);
+  if (end && end < today) return true;
+  // If payDay already passed this month
   const payDay = c.payDay || 1;
-  return todayDay > payDay && c.remainingDebt > 0;
+  return now.getDate() > payDay;
 }
 
 function LabeledSelect({
