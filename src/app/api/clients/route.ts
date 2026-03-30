@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     db.prepare(
       `INSERT INTO clients (id, first_name, last_name, middle_name, phone, address, contracts_count)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, firstName, lastName, middleName, phone, address, contractsCount);
+    ).run(id, firstName, lastName, middleName, phone, address || '', contractsCount);
 
     return NextResponse.json({ ok: true, id });
   } catch (error) {

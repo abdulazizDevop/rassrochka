@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Client } from '@/lib/types';
-import { ChevronDown, Download, Plus, Trash2, Search, Calculator, Camera, X, ZoomIn, FileText, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { ChevronDown, Download, Plus, Trash2, Search, Calculator, Camera, X, ZoomIn, FileText, FileSpreadsheet, AlertCircle, UserPlus, Users } from 'lucide-react';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
 const ACCOUNTS = ['общий (Доступно: 3 945 563 ₽)'];
@@ -17,15 +17,11 @@ function formatDate(value: string): string {
 }
 
 function formatRuPhone(value: string): string {
-  // Strip everything except digits
   const digits = value.replace(/\D/g, '');
-  // Ensure starts with 7
   let d = digits;
   if (d.startsWith('8')) d = '7' + d.slice(1);
   if (!d.startsWith('7') && d.length > 0) d = '7' + d;
-  // Limit to 11 digits (7 + 10)
   d = d.slice(0, 11);
-  // Format: +7 (XXX) XXX-XX-XX
   if (d.length === 0) return '';
   if (d.length <= 1) return '+7';
   if (d.length <= 4) return `+7 (${d.slice(1)}`;
@@ -56,7 +52,6 @@ export default function CreateContractPage() {
   const [firstPayment, setFirstPayment] = useState('');
   const [months, setMonths] = useState('');
   const [source, setSource] = useState(paymentMethods[0] ?? '');
-  // Sync source when paymentMethods load from API
   useEffect(() => {
     if (paymentMethods.length > 0) {
       setSource(prev => paymentMethods.includes(prev) ? prev : paymentMethods[0]);
@@ -65,13 +60,20 @@ export default function CreateContractPage() {
   const [account, setAccount] = useState(ACCOUNTS[0]);
   const [markup, setMarkup] = useState('');
   const [productName, setProductName] = useState('');
-  const [startDate, setStartDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const n = new Date();
+    return `${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;
+  });
   const [payDay, setPayDay] = useState('');
   const [comment, setComment] = useState('');
+  // Custom total override for discount
+  const [customTotal, setCustomTotal] = useState('');
+
+  // Client mode: 'search' (existing) or 'new'
+  const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
   const [clientSearch, setClientSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [showClientResults, setShowClientResults] = useState(false);
-  const [showNewClient, setShowNewClient] = useState(false);
   const [newClientFirst, setNewClientFirst] = useState('');
   const [newClientLast, setNewClientLast] = useState('');
   const [newClientMiddle, setNewClientMiddle] = useState('');
@@ -82,33 +84,48 @@ export default function CreateContractPage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [alertMsg, setAlertMsg] = useState('');
 
+  // Calculations — markup applies to remainder after first payment
   const costNum = parseFloat(cost) || 0;
   const firstPaymentNum = parseFloat(firstPayment) || 0;
   const markupNum = parseFloat(markup) || 0;
   const monthsNum = parseInt(months) || 0;
   const payDayNum = parseInt(payDay) || 1;
-  const markupAmount = costNum * markupNum / 100;
-  const totalWithMarkup = costNum + markupAmount;
-  const amountAfterFirst = totalWithMarkup - firstPaymentNum;
-  const monthly = monthsNum > 0 ? Math.ceil(amountAfterFirst / monthsNum) : 0;
+
+  const baseForMarkup = costNum - firstPaymentNum; // remainder after first payment
+  const markupAmount = baseForMarkup > 0 ? baseForMarkup * markupNum / 100 : 0;
+  const systemTotal = costNum + markupAmount; // system-calculated total (cost + markup on remainder)
+  const amountAfterFirst = systemTotal - firstPaymentNum; // what's left to pay in installments
+
+  // Custom total logic (discount)
+  const customTotalNum = parseFloat(customTotal) || 0;
+  const hasDiscount = customTotal !== '' && customTotalNum < systemTotal;
+  const effectiveTotal = hasDiscount ? customTotalNum : systemTotal;
+  const effectiveAfterFirst = effectiveTotal - firstPaymentNum;
+  const discountAmount = hasDiscount ? systemTotal - customTotalNum : 0;
+
+  const monthly = monthsNum > 0 ? Math.ceil(effectiveAfterFirst / monthsNum) : 0;
   const total = firstPaymentNum + monthly * monthsNum;
-  const remainingDebt = amountAfterFirst;
+  const remainingDebt = effectiveAfterFirst;
+
+  // Reset custom total when inputs change
+  useEffect(() => {
+    setCustomTotal('');
+  }, [cost, firstPayment, markup]);
 
   const paymentSchedule = useMemo(() => {
+    if (monthsNum <= 0) return [];
     const schedule = [];
-    const [d, m, y] = startDate.split('.').map(Number);
-    let current = new Date(y, m - 1, d);
+    const now = new Date();
     for (let i = 0; i < monthsNum; i++) {
-      current = new Date(current);
-      current.setMonth(current.getMonth() + 1);
+      const d = new Date(now.getFullYear(), now.getMonth() + i + 1, payDayNum);
       schedule.push({
         month: i + 1,
-        date: current.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
         amount: monthly,
       });
     }
     return schedule;
-  }, [startDate, monthsNum, monthly]);
+  }, [monthsNum, monthly, payDayNum]);
 
   const clientResults = useMemo(() => {
     if (!clientSearch) return [];
@@ -121,13 +138,11 @@ export default function CreateContractPage() {
 
   const handlePhotoFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    // optimistic base64 preview first
     Array.from(files).forEach(file => {
       const reader = new FileReader();
       reader.onload = e => { setNewClientPhotos(prev => [...prev, e.target?.result as string]); };
       reader.readAsDataURL(file);
     });
-    // then upload and replace with server URLs once client is created (handled on save)
   };
 
   const handleCreateNewClient = () => {
@@ -143,7 +158,7 @@ export default function CreateContractPage() {
     };
     addClient(newClient);
     setSelectedClient(newClient);
-    setShowNewClient(false);
+    setClientMode('search');
     setNewClientFirst(''); setNewClientLast(''); setNewClientMiddle(''); setNewClientPhone('');
     setNewClientPhotos([]);
   };
@@ -153,6 +168,7 @@ export default function CreateContractPage() {
       setAlertMsg('Заполните все обязательные поля');
       return;
     }
+    const finalDebt = effectiveAfterFirst;
     const newContract = {
       id: Date.now().toString(),
       number: contracts.length + 1,
@@ -163,7 +179,7 @@ export default function CreateContractPage() {
       product: productName,
       phone: selectedClient.phone,
       status: 'На проверке' as const,
-      remainingDebt: amountAfterFirst,
+      remainingDebt: finalDebt,
       monthlyPayment: monthly,
       paymentStatus: 'Новый договор' as const,
       cost: costNum,
@@ -180,7 +196,6 @@ export default function CreateContractPage() {
       approved: false,
     };
     addContract(newContract);
-    // Process first payment if any
     if (firstPaymentNum > 0) {
       depositAccount('cash', firstPaymentNum, `Первый взнос по договору ${newContract.clientName} (#${newContract.number}) · ${productName}`);
       addAuditEntry({
@@ -193,6 +208,16 @@ export default function CreateContractPage() {
     router.push('/dashboard/contracts');
   };
 
+  const buildDraft = () => ({
+    id: 'draft', number: contracts.length + 1, createdAt: startDate,
+    endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
+    clientId: selectedClient!.id, clientName: `${selectedClient!.lastName} ${selectedClient!.firstName} ${selectedClient!.middleName}`.trim(),
+    product: productName, phone: selectedClient!.phone, status: 'На проверке' as const,
+    remainingDebt: effectiveAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
+    cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
+    months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
+  });
+
   return (
     <div className="p-4 md:p-6">
       <div className="mb-6">
@@ -203,86 +228,39 @@ export default function CreateContractPage() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left form */}
         <div className="flex-1 min-w-0 space-y-6">
-          {/* General settings */}
-          <div className="bg-white rounded-xl p-6 border border-gray-100">
-            <h2 className="flex items-center gap-2 font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">
-              <span className="text-[#5B5BD6]">$</span> Общие настройки
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Стоимость <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <input value={cost} onChange={e => setCost(e.target.value)} type="number"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] pr-8" />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col text-gray-300 text-xs leading-none">
-                    <span>▲</span><span>▼</span>
-                  </span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Закупочная стоимость</label>
-                <div className="relative">
-                  <input value={purchaseCost} onChange={e => setPurchaseCost(e.target.value)} type="number"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] pr-8" />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col text-gray-300 text-xs leading-none">
-                    <span>▲</span><span>▼</span>
-                  </span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Первый взнос</label>
-                <div className="relative">
-                  <input value={firstPayment} onChange={e => setFirstPayment(e.target.value)} type="number"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] pr-8" />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col text-gray-300 text-xs leading-none">
-                    <span>▲</span><span>▼</span>
-                  </span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Количество месяцев <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <input value={months} onChange={e => setMonths(e.target.value.replace(/\D/g, ''))} type="text" inputMode="numeric" placeholder="0"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] pr-8" />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col text-gray-300 text-xs leading-none">
-                    <span>▲</span><span>▼</span>
-                  </span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Способ оплаты</label>
-                <div className="relative">
-                  <select value={source} onChange={e => setSource(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
-                    {paymentMethods.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm text-gray-700 mb-1">Денежный счет <span className="text-red-500">*</span></label>
-                <div className="flex gap-3">
-                  <div className="relative flex-1">
-                    <select value={account} onChange={e => setAccount(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
-                      {ACCOUNTS.map(a => <option key={a}>{a}</option>)}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                  <div className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-400 whitespace-nowrap">
-                    Доступно: <span className="text-green-600 font-medium">0 ₽</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Client section */}
           <div className="bg-white rounded-xl p-6 border border-gray-100">
-            <h2 className="flex items-center gap-2 font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">
-              <span className="text-[#5B5BD6]">👤</span> Клиент<span className="text-red-500">*</span>
+            <h2 className="flex items-center gap-2 font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-[#5B5BD6]">👤</span> Клиент <span className="text-red-500">*</span>
             </h2>
 
+            {/* Toggle: existing / new client */}
+            {!selectedClient && (
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setClientMode('search')}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    clientMode === 'search'
+                      ? 'bg-[#5B5BD6] text-white'
+                      : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <Users size={15} /> Из базы
+                </button>
+                <button
+                  onClick={() => setClientMode('new')}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    clientMode === 'new'
+                      ? 'bg-[#22c55e] text-white'
+                      : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <UserPlus size={15} /> Новый клиент
+                </button>
+              </div>
+            )}
+
+            {/* Selected client badge */}
             {selectedClient ? (
               <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg mb-3">
                 <div>
@@ -293,7 +271,8 @@ export default function CreateContractPage() {
                   <Trash2 size={16} />
                 </button>
               </div>
-            ) : (
+            ) : clientMode === 'search' ? (
+              /* Search existing client */
               <div className="relative mb-3">
                 <div className="flex items-center border border-gray-200 rounded-lg px-3 py-2.5">
                   <Search size={16} className="text-gray-400 mr-2" />
@@ -317,23 +296,9 @@ export default function CreateContractPage() {
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Product name when existing client selected */}
-            {selectedClient && (
-              <div className="mb-3">
-                <label className="block text-sm text-gray-700 mb-1">Название товара <span className="text-red-500">*</span></label>
-                <input
-                  value={productName}
-                  onChange={e => setProductName(e.target.value)}
-                  placeholder="Введите название товара"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
-                />
-              </div>
-            )}
-
-            {showNewClient ? (
-              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            ) : (
+              /* New client form */
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3 mb-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input value={newClientFirst} onChange={e => setNewClientFirst(e.target.value)} placeholder="Имя *"
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
@@ -345,63 +310,36 @@ export default function CreateContractPage() {
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
                 </div>
 
-                {/* Product name - right after phone */}
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Название товара <span className="text-red-500">*</span></label>
-                  <input
-                    value={productName}
-                    onChange={e => setProductName(e.target.value)}
-                    placeholder="Введите название товара"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
-                  />
-                </div>
-
                 {/* Passport photos */}
                 <div>
                   <label className="block text-sm text-gray-600 mb-2 flex items-center gap-1.5">
                     <Camera size={14} className="text-[#5B5BD6]" /> Фото паспорта
                     <span className="text-gray-400 font-normal text-xs">(необязательно)</span>
                   </label>
-
-                  {/* Upload button */}
                   <div
                     className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#5B5BD6] hover:bg-[#F5F5FF] transition"
                     onClick={() => photoFileRef.current?.click()}
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); handlePhotoFiles(e.dataTransfer.files); }}
                   >
-                    <input
-                      ref={photoFileRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={e => handlePhotoFiles(e.target.files)}
-                    />
+                    <input ref={photoFileRef} type="file" accept="image/*" multiple className="hidden"
+                      onChange={e => handlePhotoFiles(e.target.files)} />
                     <Camera size={20} className="mx-auto text-gray-300 mb-1" />
                     <p className="text-xs text-gray-500 font-medium">Нажмите или перетащите фото паспорта</p>
-                    <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, WEBP · можно несколько</p>
+                    <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, WEBP</p>
                   </div>
-
-                  {/* Thumbnails */}
                   {newClientPhotos.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {newClientPhotos.map((src, i) => (
                         <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                           <img src={src} alt={`Паспорт ${i + 1}`} className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={e => { e.stopPropagation(); setPhotoLightbox(i); }}
-                              className="bg-white/90 rounded-full p-1 hover:bg-white"
-                            >
+                            <button type="button" onClick={e => { e.stopPropagation(); setPhotoLightbox(i); }}
+                              className="bg-white/90 rounded-full p-1 hover:bg-white">
                               <ZoomIn size={11} className="text-gray-700" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={e => { e.stopPropagation(); setNewClientPhotos(prev => prev.filter((_, idx) => idx !== i)); }}
-                              className="bg-red-500 rounded-full p-1 hover:bg-red-600"
-                            >
+                            <button type="button" onClick={e => { e.stopPropagation(); setNewClientPhotos(prev => prev.filter((_, idx) => idx !== i)); }}
+                              className="bg-red-500 rounded-full p-1 hover:bg-red-600">
                               <X size={11} className="text-white" />
                             </button>
                           </div>
@@ -411,20 +349,80 @@ export default function CreateContractPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleCreateNewClient} className="bg-[#5B5BD6] text-white rounded-lg px-4 py-2 text-sm hover:bg-[#4a4ac4]">
+                  <button onClick={handleCreateNewClient} disabled={!newClientFirst || !newClientPhone}
+                    className="bg-[#5B5BD6] text-white rounded-lg px-4 py-2 text-sm hover:bg-[#4a4ac4] disabled:opacity-50">
                     Создать
                   </button>
-                  <button onClick={() => setShowNewClient(false)} className="border border-gray-200 rounded-lg px-4 py-2 text-sm hover:bg-gray-50">
+                  <button onClick={() => setClientMode('search')} className="border border-gray-200 rounded-lg px-4 py-2 text-sm hover:bg-gray-50">
                     Отмена
                   </button>
                 </div>
               </div>
-            ) : (
-              <button onClick={() => setShowNewClient(true)}
-                className="flex items-center gap-2 border border-[#5B5BD6] text-[#5B5BD6] rounded-lg px-4 py-2 text-sm hover:bg-[#EEF0FF] transition">
-                <Plus size={16} /> Создать нового клиента
-              </button>
             )}
+
+            {/* Product name — always visible */}
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Название товара</label>
+              <input
+                value={productName}
+                onChange={e => setProductName(e.target.value)}
+                placeholder="Введите название товара (необязательно)"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+              />
+            </div>
+          </div>
+
+          {/* General settings */}
+          <div className="bg-white rounded-xl p-6 border border-gray-100">
+            <h2 className="flex items-center gap-2 font-semibold text-gray-900 mb-5 pb-3 border-b border-gray-100">
+              <span className="text-[#5B5BD6]">$</span> Общие настройки
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Стоимость <span className="text-red-500">*</span></label>
+                <input value={cost} onChange={e => setCost(e.target.value.replace(/[^\d.]/g, ''))}
+                  type="text" inputMode="numeric" placeholder="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Закупочная стоимость</label>
+                <input value={purchaseCost} onChange={e => setPurchaseCost(e.target.value.replace(/[^\d.]/g, ''))}
+                  type="text" inputMode="numeric" placeholder="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Первый взнос</label>
+                <input value={firstPayment} onChange={e => setFirstPayment(e.target.value.replace(/[^\d.]/g, ''))}
+                  type="text" inputMode="numeric" placeholder="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Количество месяцев <span className="text-red-500">*</span></label>
+                <input value={months} onChange={e => setMonths(e.target.value.replace(/\D/g, ''))}
+                  type="text" inputMode="numeric" placeholder="0"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Способ оплаты</label>
+                <div className="relative">
+                  <select value={source} onChange={e => setSource(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
+                    {paymentMethods.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Денежный счет <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select value={account} onChange={e => setAccount(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
+                    {ACCOUNTS.map(a => <option key={a}>{a}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Dates */}
@@ -460,7 +458,7 @@ export default function CreateContractPage() {
 
           <button onClick={handleSubmit}
             className="flex items-center gap-2 bg-[#5B5BD6] text-white rounded-xl px-6 py-3 font-semibold hover:bg-[#4a4ac4] transition">
-            ✓ Создать договор
+            Создать договор
           </button>
         </div>
 
@@ -478,6 +476,14 @@ export default function CreateContractPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-white/80">Стоимость</span>
                 <span className="font-medium">{costNum.toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-white/80">Первый взнос</span>
+                <span className="font-medium">{firstPaymentNum.toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-white/80">База для наценки</span>
+                <span className="font-medium">{(baseForMarkup > 0 ? baseForMarkup : 0).toLocaleString('ru-RU')} ₽</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-white/80">Наценка (%)</span>
@@ -497,38 +503,65 @@ export default function CreateContractPage() {
                 <span className="font-medium">{markupAmount.toLocaleString('ru-RU')} ₽</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-white/80">Итого с наценкой</span>
-                <span className="font-medium">{totalWithMarkup.toLocaleString('ru-RU')} ₽</span>
+                <span className="text-white/80">Итого (система)</span>
+                <span className="font-medium">{systemTotal.toLocaleString('ru-RU')} ₽</span>
               </div>
+
+              {/* Editable total */}
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-white/80">Итого (ручной)</span>
+                <input
+                  value={customTotal}
+                  onChange={e => setCustomTotal(e.target.value.replace(/[^\d.]/g, ''))}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder={systemTotal.toLocaleString('ru-RU')}
+                  className="w-28 bg-white/20 border border-white/30 rounded-lg px-2 py-1 text-white text-right text-sm outline-none focus:border-white placeholder:text-white/50"
+                />
+              </div>
+
+              {/* Discount badge */}
+              {hasDiscount && (
+                <div className="bg-green-500/30 border border-green-400/40 rounded-lg px-3 py-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-200">Скидка</span>
+                    <span className="font-medium text-green-200">-{discountAmount.toLocaleString('ru-RU')} ₽</span>
+                  </div>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className="text-green-300/70 line-through">{systemTotal.toLocaleString('ru-RU')} ₽</span>
+                    <span className="font-bold text-green-100">{customTotalNum.toLocaleString('ru-RU')} ₽</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-between text-sm">
                 <span className="text-white/80">Количество месяцев</span>
                 <span className="font-medium">{monthsNum}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/80">Первый взнос</span>
-                <span className="font-medium">{firstPaymentNum.toLocaleString('ru-RU')} ₽</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/80">Ежемесячно</span>
                 <span className="font-medium">{monthly.toLocaleString('ru-RU')} ₽</span>
               </div>
 
-              {/* Payment schedule toggle */}
-              <button onClick={() => setShowSchedule(v => !v)}
-                className="flex items-center gap-1 text-white/80 text-xs hover:text-white transition">
-                <ChevronDown size={14} className={showSchedule ? 'rotate-180' : ''} />
-                График платежей
-              </button>
-
-              {showSchedule && (
-                <div className="bg-white/10 rounded-lg p-3 space-y-1.5 max-h-40 overflow-y-auto">
-                  {paymentSchedule.map(p => (
-                    <div key={p.month} className="flex justify-between text-xs">
-                      <span className="text-white/70">{p.date}</span>
-                      <span className="font-medium">{p.amount.toLocaleString('ru-RU')} ₽</span>
+              {/* Payment schedule */}
+              {paymentSchedule.length > 0 && (
+                <>
+                  <button onClick={() => setShowSchedule(v => !v)}
+                    className="flex items-center gap-1 text-white/80 text-xs hover:text-white transition">
+                    <ChevronDown size={14} className={showSchedule ? 'rotate-180' : ''} />
+                    График платежей ({paymentSchedule.length} мес.)
+                  </button>
+                  {showSchedule && (
+                    <div className="space-y-0">
+                      {paymentSchedule.map(p => (
+                        <div key={p.month} className="flex justify-between text-xs py-1.5 border-b border-white/10 last:border-0">
+                          <span className="text-white/60">{p.month}. {p.date}</span>
+                          <span className="font-medium">{p.amount.toLocaleString('ru-RU')} ₽</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
 
               <div className="border-t border-white/20 pt-3 mt-2">
@@ -543,76 +576,45 @@ export default function CreateContractPage() {
               </div>
             </div>
 
-              <div className="flex gap-2 mt-5">
-                <button
-                  onClick={async () => {
-                    if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
-                    const draftContract = {
-                      id: 'draft', number: contracts.length + 1, createdAt: startDate,
-                      endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
-                      clientId: selectedClient.id, clientName: `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim(),
-                      product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
-                      remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
-                      cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
-                    };
-                    await downloadContractPdf(draftContract, selectedClient);
-                  }}
-                  className="flex-1 flex items-center justify-center gap-1.5 border border-white/30 rounded-lg py-2.5 text-sm hover:bg-white/10 transition">
-                  <FileText size={15} /> PDF
-                </button>
-                <button
-                  onClick={() => {
-                    if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
-                    const draftContract = {
-                      id: 'draft', number: contracts.length + 1, createdAt: startDate,
-                      endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
-                      clientId: selectedClient.id, clientName: `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim(),
-                      product: productName, phone: selectedClient.phone, status: 'На проверке' as const,
-                      remainingDebt: amountAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
-                      cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-                      months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
-                    };
-                    downloadContractExcel(draftContract, selectedClient);
-                  }}
-                  className="flex-1 flex items-center justify-center gap-1.5 border border-white/30 rounded-lg py-2.5 text-sm hover:bg-white/10 transition">
-                  <FileSpreadsheet size={15} /> Excel
-                </button>
-              </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={async () => {
+                  if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
+                  await downloadContractPdf(buildDraft(), selectedClient);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 border border-white/30 rounded-lg py-2.5 text-sm hover:bg-white/10 transition">
+                <FileText size={15} /> PDF
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
+                  downloadContractExcel(buildDraft(), selectedClient);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 border border-white/30 rounded-lg py-2.5 text-sm hover:bg-white/10 transition">
+                <FileSpreadsheet size={15} /> Excel
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Lightbox for passport photos */}
       {photoLightbox !== null && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
-          onClick={() => setPhotoLightbox(null)}
-        >
-          <img
-            src={newClientPhotos[photoLightbox]}
-            alt="Паспорт"
-            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            className="absolute top-4 right-4 text-white bg-white/20 rounded-full p-2 hover:bg-white/40"
-            onClick={() => setPhotoLightbox(null)}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={() => setPhotoLightbox(null)}>
+          <img src={newClientPhotos[photoLightbox]} alt="Паспорт"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+          <button className="absolute top-4 right-4 text-white bg-white/20 rounded-full p-2 hover:bg-white/40"
+            onClick={() => setPhotoLightbox(null)}>
             <X size={20} />
           </button>
           {newClientPhotos.length > 1 && (
             <>
-              <button
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
-                onClick={e => { e.stopPropagation(); setPhotoLightbox(i => ((i ?? 0) - 1 + newClientPhotos.length) % newClientPhotos.length); }}
-              >
+              <button className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
+                onClick={e => { e.stopPropagation(); setPhotoLightbox(i => ((i ?? 0) - 1 + newClientPhotos.length) % newClientPhotos.length); }}>
                 <ChevronDown size={22} className="rotate-90" />
               </button>
-              <button
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
-                onClick={e => { e.stopPropagation(); setPhotoLightbox(i => ((i ?? 0) + 1) % newClientPhotos.length); }}
-              >
+              <button className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
+                onClick={e => { e.stopPropagation(); setPhotoLightbox(i => ((i ?? 0) + 1) % newClientPhotos.length); }}>
                 <ChevronDown size={22} className="-rotate-90" />
               </button>
             </>
