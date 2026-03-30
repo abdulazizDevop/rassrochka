@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Contract, ContractStatus } from '@/lib/types';
-import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet } from 'lucide-react';
+import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, AlertTriangle, CreditCard, X } from 'lucide-react';
 import Link from 'next/link';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
@@ -55,6 +55,17 @@ function getOverdueDays(endDate: string): number {
   return diff > 0 ? Math.floor(diff / (1000 * 60 * 60 * 24)) : 0;
 }
 
+/** How many days until the next payment for this contract */
+function getDaysUntilPayment(c: Contract): number {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const payDay = c.payDay || 1;
+  // Next payment date: this month's payDay or next month's
+  let next = new Date(now.getFullYear(), now.getMonth(), payDay);
+  if (next < today) next = new Date(now.getFullYear(), now.getMonth() + 1, payDay);
+  return Math.floor((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 function LabeledSelect({
   label, value, options, onChange,
 }: {
@@ -95,10 +106,161 @@ function LabeledSelect({
   );
 }
 
+/* ─── Payment Modal ─── */
+function PaymentModal({ contract, onClose, onPay }: {
+  contract: Contract;
+  onClose: () => void;
+  onPay: (contract: Contract, amount: number) => void;
+}) {
+  const [amount, setAmount] = useState(String(contract.monthlyPayment));
+  const amountNum = parseFloat(amount) || 0;
+  const isFullPayoff = amountNum >= contract.remainingDebt;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+          <h3 className="text-lg font-bold text-gray-900">Погасить платеж</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        <div className="px-6 pb-2">
+          <div className="bg-gray-50 rounded-lg p-4 space-y-2 mb-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Договор</span>
+              <span className="font-medium text-gray-900">#{contract.number} — {contract.product}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Клиент</span>
+              <span className="font-medium text-gray-900">{contract.clientName}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Остаток долга</span>
+              <span className="font-medium text-red-500">{contract.remainingDebt.toLocaleString('ru-RU')} ₽</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Ежемесячный платеж</span>
+              <span className="font-medium text-gray-900">{contract.monthlyPayment.toLocaleString('ru-RU')} ₽</span>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Сумма оплаты</label>
+            <input
+              value={amount}
+              onChange={e => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-lg font-semibold outline-none focus:border-[#5B5BD6]"
+            />
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setAmount(String(contract.monthlyPayment))}
+                className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition">
+                Ежемесячный ({contract.monthlyPayment.toLocaleString('ru-RU')} ₽)
+              </button>
+              <button onClick={() => setAmount(String(contract.remainingDebt))}
+                className="text-xs border border-green-300 text-green-600 rounded-lg px-3 py-1.5 hover:bg-green-50 transition">
+                Весь долг ({contract.remainingDebt.toLocaleString('ru-RU')} ₽)
+              </button>
+            </div>
+          </div>
+
+          {isFullPayoff && amountNum > 0 && (
+            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 text-sm text-green-700">
+              Договор будет полностью погашен
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-6 pb-5">
+          <button
+            onClick={() => { if (amountNum > 0) onPay(contract, amountNum); }}
+            disabled={amountNum <= 0}
+            className="flex-1 bg-[#5B5BD6] text-white rounded-lg py-3 text-sm font-semibold hover:bg-[#4a4ac4] transition disabled:opacity-50">
+            {isFullPayoff ? 'Погасить полностью' : `Оплатить ${amountNum.toLocaleString('ru-RU')} ₽`}
+          </button>
+          <button onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-3 text-sm font-medium hover:bg-gray-50 transition">
+            Отмена
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Upcoming Payments Card ─── */
+function UpcomingCard({ contract, onPay, isViewer }: {
+  contract: Contract;
+  onPay: (c: Contract) => void;
+  isViewer: boolean;
+}) {
+  const days = getDaysUntilPayment(contract);
+  const isOverdue = contract.status === 'Просрочен';
+  const urgent = days <= 1 || isOverdue;
+
+  return (
+    <div className={`bg-white rounded-xl border p-4 ${urgent ? 'border-red-200 bg-red-50/30' : 'border-orange-200 bg-orange-50/30'}`}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="font-semibold text-gray-900">#{contract.number} — {contract.product}</p>
+          <p className="text-sm text-gray-500">{contract.clientName}</p>
+        </div>
+        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+          isOverdue ? 'bg-red-100 text-red-600' :
+          days <= 1 ? 'bg-red-100 text-red-600' :
+          'bg-orange-100 text-orange-600'
+        }`}>
+          {isOverdue ? 'Просрочен' : days === 0 ? 'Сегодня' : days === 1 ? 'Завтра' : `Через ${days} дн.`}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+        <div>
+          <span className="text-gray-500">Платеж:</span>
+          <span className="font-medium ml-1">{contract.monthlyPayment.toLocaleString('ru-RU')} ₽</span>
+        </div>
+        <div>
+          <span className="text-gray-500">Долг:</span>
+          <span className="font-medium text-red-500 ml-1">{contract.remainingDebt.toLocaleString('ru-RU')} ₽</span>
+        </div>
+        <div>
+          <span className="text-gray-500">Телефон:</span>
+          <span className="ml-1">{contract.phone}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">День оплаты:</span>
+          <span className="ml-1">{contract.payDay}</span>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {!isViewer && (
+          <button onClick={() => onPay(contract)}
+            className="flex items-center gap-1.5 bg-[#5B5BD6] text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-[#4a4ac4] transition">
+            <CreditCard size={14} /> Погасить
+          </button>
+        )}
+        <button onClick={() => {
+          const msg = encodeURIComponent(`Напоминание: платеж по договору №${contract.number}\nСумма: ${contract.monthlyPayment.toLocaleString('ru-RU')} ₽\nОстаток: ${contract.remainingDebt.toLocaleString('ru-RU')} ₽`);
+          window.open(`https://wa.me/${contract.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
+        }}
+          className="flex items-center gap-1.5 border border-gray-200 text-gray-600 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 transition">
+          <MessageCircle size={14} /> WhatsApp
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Page ─── */
 export default function ContractsPage() {
   const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry, settings } = useApp();
   const SOURCES = settings.paymentMethods ?? DEFAULT_SOURCES;
   const isViewer = currentUser?.role === 'viewer';
+
+  // Tab state
+  const [tab, setTab] = useState<'all' | 'upcoming'>('all');
+
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -110,6 +272,7 @@ export default function ContractsPage() {
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortAsc, setSortAsc] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [payContract, setPayContract] = useState<Contract | null>(null);
   const colRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,6 +283,17 @@ export default function ContractsPage() {
 
   const toggleColumn = (key: string) => setColumns(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
   const handleSort = (key: string) => { if (sortKey === key) setSortAsc(a => !a); else { setSortKey(key); setSortAsc(true); } };
+
+  // Upcoming payments: contracts with <=3 days until payment or overdue, and still have debt
+  const upcomingContracts = useMemo(() => {
+    return contracts.filter(c => {
+      if (c.remainingDebt <= 0) return false;
+      if (c.status === 'Погашен' || c.status === 'Досрочно погашен' || c.status === 'Списан') return false;
+      if (c.status === 'Просрочен') return true;
+      const days = getDaysUntilPayment(c);
+      return days <= 3;
+    }).sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+  }, [contracts]);
 
   const filtered = useMemo(() => {
     let result = contracts;
@@ -136,8 +310,8 @@ export default function ContractsPage() {
     if (dateFrom) { const f = parseRuDate(dateFrom); if (f) result = result.filter(c => { const d = parseRuDate(c.createdAt); return d && d >= f; }); }
     if (dateTo) { const t = parseRuDate(dateTo); if (t) result = result.filter(c => { const d = parseRuDate(c.createdAt); return d && d <= t; }); }
     return [...result].sort((a, b) => {
-        const av = (a as unknown as Record<string, unknown>)[sortKey] as string | number ?? '';
-        const bv = (b as unknown as Record<string, unknown>)[sortKey] as string | number ?? '';
+      const av = (a as unknown as Record<string, unknown>)[sortKey] as string | number ?? '';
+      const bv = (b as unknown as Record<string, unknown>)[sortKey] as string | number ?? '';
       if (typeof av === 'string' && typeof bv === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
@@ -151,23 +325,23 @@ export default function ContractsPage() {
     return 'text-gray-700';
   };
 
-  const handlePay = (c: Contract) => {
-    const payment = c.monthlyPayment;
-    const newDebt = Math.max(0, c.remainingDebt - payment);
+  const handlePay = (c: Contract, amount: number) => {
+    const newDebt = Math.max(0, c.remainingDebt - amount);
     const isPaid = newDebt === 0;
+    const isEarly = isPaid && amount >= c.remainingDebt && c.months > 1;
     updateContract(c.id, {
       paymentStatus: 'Оплачено',
       remainingDebt: newDebt,
-      ...(isPaid ? { status: 'Погашен' } : {}),
+      ...(isPaid ? { status: isEarly ? 'Досрочно погашен' : 'Погашен' } : {}),
     });
-    // Add payment to account balance + ledger
-    depositAccount('cash', payment, `Платеж по договору ${c.clientName} (#${c.number}) · ${c.product}`);
+    depositAccount('cash', amount, `Платёж клиента ${c.clientName} (#${c.number}) · ${c.product}`);
     addAuditEntry({
       action: 'Создание',
       section: 'Платежи',
-      entity: `Платёж ${payment.toLocaleString('ru-RU')} ₽`,
-      details: `Договор #${c.number} (${c.clientName}) · ${c.product}`,
+      entity: `Платёж ${amount.toLocaleString('ru-RU')} ₽`,
+      details: `Договор #${c.number} (${c.clientName}) · ${c.product}${isPaid ? ' · Полное погашение' : ''}`,
     });
+    setPayContract(null);
   };
 
   const renderStatus = (c: Contract) => {
@@ -187,128 +361,167 @@ export default function ContractsPage() {
         <p className="text-sm text-gray-500 mt-1">Фильтруйте, просматривайте и управляйте договорами</p>
       </div>
 
-      <div className="mb-4">
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Поиск по ФИО, номеру или товару"
-          className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+        <button onClick={() => setTab('all')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition ${
+            tab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}>
+          <FileText size={15} /> Все договоры
+        </button>
+        <button onClick={() => setTab('upcoming')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition ${
+            tab === 'upcoming' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}>
+          <Clock size={15} /> Ближайшие оплаты
+          {upcomingContracts.length > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {upcomingContracts.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4 items-center">
-        <div className="relative" ref={colRef}>
-          <button onClick={() => setShowColumns(v => !v)}
-            className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white hover:bg-gray-50">
-            <AlignJustify size={14} /> Колонки <ChevronDown size={14} />
-          </button>
-          {showColumns && (
-            <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[200px]">
-              {columns.map(col => (
-                <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm">
-                  <input type="checkbox" checked={col.visible} onChange={() => toggleColumn(col.key)} />
-                  {col.label}
-                </label>
+      {/* ─── Tab: Upcoming Payments ─── */}
+      {tab === 'upcoming' && (
+        <div>
+          {upcomingContracts.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 py-16 text-center">
+              <Clock size={40} className="mx-auto mb-3 text-gray-300" />
+              <p className="text-gray-400 text-sm">Нет договоров с ближайшими оплатами</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {upcomingContracts.map(c => (
+                <UpcomingCard key={c.id} contract={c} onPay={setPayContract} isViewer={isViewer} />
               ))}
             </div>
           )}
         </div>
+      )}
 
-        <span className="text-sm text-gray-600">С</span>
-        <input type="text" placeholder={today} value={dateFrom} onChange={e => setDateFrom(formatDateInput(e.target.value))} maxLength={10}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 outline-none focus:border-[#5B5BD6] text-gray-500 placeholder:text-gray-300" />
-        <span className="text-sm text-gray-600">До</span>
-        <input type="text" placeholder={today} value={dateTo} onChange={e => setDateTo(formatDateInput(e.target.value))} maxLength={10}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 outline-none focus:border-[#5B5BD6] text-gray-500 placeholder:text-gray-300" />
+      {/* ─── Tab: All Contracts ─── */}
+      {tab === 'all' && (
+        <>
+          <div className="mb-4">
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Поиск по ФИО, номеру или товару"
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
+          </div>
 
-        <LabeledSelect label="Статусы" value={statusFilter} options={STATUSES} onChange={setStatusFilter} />
-        <LabeledSelect label="Платеж" value={paymentFilter} options={PAYMENT_STATUSES} onChange={setPaymentFilter} />
-        <LabeledSelect label="Источники" value={sourceFilter} options={SOURCES} onChange={setSourceFilter} />
-      </div>
+          <div className="flex flex-wrap gap-3 mb-4 items-center">
+            <div className="relative" ref={colRef}>
+              <button onClick={() => setShowColumns(v => !v)}
+                className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white hover:bg-gray-50">
+                <AlignJustify size={14} /> Колонки <ChevronDown size={14} />
+              </button>
+              {showColumns && (
+                <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[200px]">
+                  {columns.map(col => (
+                    <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm">
+                      <input type="checkbox" checked={col.visible} onChange={() => toggleColumn(col.key)} />
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
 
+            <span className="text-sm text-gray-600">С</span>
+            <input type="text" placeholder={today} value={dateFrom} onChange={e => setDateFrom(formatDateInput(e.target.value))} maxLength={10}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 outline-none focus:border-[#5B5BD6] text-gray-500 placeholder:text-gray-300" />
+            <span className="text-sm text-gray-600">До</span>
+            <input type="text" placeholder={today} value={dateTo} onChange={e => setDateTo(formatDateInput(e.target.value))} maxLength={10}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 outline-none focus:border-[#5B5BD6] text-gray-500 placeholder:text-gray-300" />
 
+            <LabeledSelect label="Статусы" value={statusFilter} options={STATUSES} onChange={setStatusFilter} />
+            <LabeledSelect label="Платеж" value={paymentFilter} options={PAYMENT_STATUSES} onChange={setPaymentFilter} />
+            <LabeledSelect label="Источники" value={sourceFilter} options={SOURCES} onChange={setSourceFilter} />
+          </div>
 
-      <p className="text-sm text-gray-500 mb-3">Показано {filtered.length} из {contracts.length} записей</p>
+          <p className="text-sm text-gray-500 mb-3">Показано {filtered.length} из {contracts.length} записей</p>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100">
-              {visibleCols.map(col => (
-                <th key={col.key} onClick={() => handleSort(col.key)}
-                  className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none whitespace-nowrap hover:text-gray-900">
-                  <span className="flex items-center gap-1">
-                    {col.label}
-                    {sortKey === col.key ? (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
-                  </span>
-                </th>
-              ))}
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(c => (
-              <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
-                {visibleCols.map(col => (
-                  <td key={col.key} className="px-4 py-3 whitespace-nowrap">
-                    {col.key === 'number' && <span className="text-gray-700">{c.number}</span>}
-                    {col.key === 'createdAt' && <span className="text-gray-700">{c.createdAt}</span>}
-                    {col.key === 'endDate' && <span className="text-gray-700">{c.endDate}</span>}
-                    {col.key === 'clientName' && <Link href="/dashboard/clients" className="text-[#5B5BD6] hover:underline">{c.clientName}</Link>}
-                    {col.key === 'product' && <span className="text-gray-700">{c.product}</span>}
-                    {col.key === 'phone' && <span className="text-gray-700">{c.phone}</span>}
-                    {col.key === 'status' && renderStatus(c)}
-                    {col.key === 'remainingDebt' && <span className="text-gray-700">{c.remainingDebt.toLocaleString('ru-RU')}</span>}
-                    {col.key === 'monthlyPayment' && <span className="text-gray-700">{c.monthlyPayment.toLocaleString('ru-RU')}</span>}
-                    {col.key === 'paymentStatus' && <span className={getPaymentStatusColor(c.paymentStatus)}>{c.paymentStatus}</span>}
-                  </td>
-                ))}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {!isViewer && (c.status === 'Просрочен' || c.status === 'В процессе') && (
-                        <button onClick={() => handlePay(c)}
-                          className={`border rounded-lg px-3 py-1 text-xs font-medium transition ${
-                            c.status === 'Просрочен' ? 'border-red-300 text-red-500 hover:bg-red-50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}>
-                          Оплатить
+          <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {visibleCols.map(col => (
+                    <th key={col.key} onClick={() => handleSort(col.key)}
+                      className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none whitespace-nowrap hover:text-gray-900">
+                      <span className="flex items-center gap-1">
+                        {col.label}
+                        {sortKey === col.key ? (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(c => (
+                  <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
+                    {visibleCols.map(col => (
+                      <td key={col.key} className="px-4 py-3 whitespace-nowrap">
+                        {col.key === 'number' && <span className="text-gray-700">{c.number}</span>}
+                        {col.key === 'createdAt' && <span className="text-gray-700">{c.createdAt}</span>}
+                        {col.key === 'endDate' && <span className="text-gray-700">{c.endDate}</span>}
+                        {col.key === 'clientName' && <Link href="/dashboard/clients" className="text-[#5B5BD6] hover:underline">{c.clientName}</Link>}
+                        {col.key === 'product' && <span className="text-gray-700">{c.product}</span>}
+                        {col.key === 'phone' && <span className="text-gray-700">{c.phone}</span>}
+                        {col.key === 'status' && renderStatus(c)}
+                        {col.key === 'remainingDebt' && <span className="text-gray-700">{c.remainingDebt.toLocaleString('ru-RU')}</span>}
+                        {col.key === 'monthlyPayment' && <span className="text-gray-700">{c.monthlyPayment.toLocaleString('ru-RU')}</span>}
+                        {col.key === 'paymentStatus' && <span className={getPaymentStatusColor(c.paymentStatus)}>{c.paymentStatus}</span>}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {!isViewer && c.remainingDebt > 0 && (c.status === 'Просрочен' || c.status === 'В процессе' || c.status === 'На проверке') && (
+                          <button onClick={() => setPayContract(c)}
+                            className={`flex items-center gap-1 border rounded-lg px-3 py-1 text-xs font-medium transition ${
+                              c.status === 'Просрочен' ? 'border-red-300 text-red-500 hover:bg-red-50' : 'border-[#5B5BD6]/30 text-[#5B5BD6] hover:bg-[#EEF0FF]'
+                            }`}>
+                            <CreditCard size={12} /> Погасить
+                          </button>
+                        )}
+                        <button onClick={() => { const msg = encodeURIComponent(`Договор №${c.number} — ${c.clientName}\nПродукт: ${c.product}\nОстаток: ${c.remainingDebt.toLocaleString('ru-RU')} ₽`); window.open(`https://wa.me/${c.phone.replace(/\D/g,'')}?text=${msg}`, '_blank'); }}
+                          className="text-gray-400 hover:text-green-500 transition">
+                          <MessageCircle size={16} />
                         </button>
-                      )}
-                      <button onClick={() => { const msg = encodeURIComponent(`Договор №${c.number} — ${c.clientName}\nПродукт: ${c.product}\nОстаток: ${c.remainingDebt.toLocaleString('ru-RU')} ₽`); window.open(`https://wa.me/${c.phone.replace(/\D/g,'')}?text=${msg}`, '_blank'); }}
-                        className="text-gray-400 hover:text-green-500 transition">
-                        <MessageCircle size={16} />
-                      </button>
-                        <button
-                          title="Скачать PDF"
-                          onClick={async () => {
-                            const client = clients.find(cl => cl.id === c.clientId);
-                            await downloadContractPdf(c, client);
-                          }}
+                        <button title="Скачать PDF"
+                          onClick={async () => { const client = clients.find(cl => cl.id === c.clientId); await downloadContractPdf(c, client); }}
                           className="text-gray-400 hover:text-red-500 transition">
                           <FileText size={16} />
                         </button>
-                        <button
-                          title="Скачать Excel"
-                          onClick={() => {
-                            const client = clients.find(cl => cl.id === c.clientId);
-                            downloadContractExcel(c, client);
-                          }}
+                        <button title="Скачать Excel"
+                          onClick={() => { const client = clients.find(cl => cl.id === c.clientId); downloadContractExcel(c, client); }}
                           className="text-gray-400 hover:text-green-600 transition">
                           <FileSpreadsheet size={16} />
                         </button>
-                      {!isViewer && (
-                        <button onClick={() => setDeleteId(c.id)}
-                          className="text-gray-400 hover:text-red-500 transition">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={visibleCols.length + 1} className="px-4 py-8 text-center text-gray-400">Нет договоров</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                        {!isViewer && (
+                          <button onClick={() => setDeleteId(c.id)} className="text-gray-400 hover:text-red-500 transition">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={visibleCols.length + 1} className="px-4 py-8 text-center text-gray-400">Нет договоров</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
+      {/* Payment Modal */}
+      {payContract && (
+        <PaymentModal contract={payContract} onClose={() => setPayContract(null)} onPay={handlePay} />
+      )}
+
+      {/* Delete Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
