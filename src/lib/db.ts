@@ -114,6 +114,8 @@ function initSchema(db: Database.Database) {
       account_name    TEXT,
       account_type    TEXT,
       profit_percent  REAL,
+      profit_type     TEXT DEFAULT 'percent',
+      profit_fixed    REAL,
       period_months   INTEGER,
       period_label    TEXT
     );

@@ -131,6 +131,8 @@ export interface Investor {
   accountName?: string;
   accountType?: 'нал' | 'безнал';
   profitPercent?: number;     // % прибыли
+  profitType?: 'percent' | 'fixed'; // тип доли: процент или фиксированная сумма
+  profitFixed?: number;       // фиксированная сумма прибыли (если profitType === 'fixed')
   periodMonths?: number;      // период (мес), если не задан — «в месяц»
   periodLabel?: string;       // «в месяц» | «за X мес.»
 }

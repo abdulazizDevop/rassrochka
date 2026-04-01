@@ -164,8 +164,8 @@ export default function CreateContractPage() {
   };
 
   const handleSubmit = () => {
-    if (!selectedClient || !productName || !cost) {
-      setAlertMsg('Заполните все обязательные поля');
+    if (!cost || !firstPayment || !months || !startDate) {
+      setAlertMsg('Заполните обязательные поля: Стоимость, Первый взнос, Количество месяцев, Дата начала');
       return;
     }
     const finalDebt = effectiveAfterFirst;
@@ -174,10 +174,10 @@ export default function CreateContractPage() {
       number: contracts.length + 1,
       createdAt: startDate,
       endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
-      clientId: selectedClient.id,
-      clientName: `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim(),
-      product: productName,
-      phone: selectedClient.phone,
+      clientId: selectedClient?.id ?? '',
+      clientName: selectedClient ? `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim() : '',
+      product: productName || '',
+      phone: selectedClient?.phone ?? '',
       status: 'На проверке' as const,
       remainingDebt: finalDebt,
       monthlyPayment: monthly,
@@ -211,8 +211,8 @@ export default function CreateContractPage() {
   const buildDraft = () => ({
     id: 'draft', number: contracts.length + 1, createdAt: startDate,
     endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
-    clientId: selectedClient!.id, clientName: `${selectedClient!.lastName} ${selectedClient!.firstName} ${selectedClient!.middleName}`.trim(),
-    product: productName, phone: selectedClient!.phone, status: 'На проверке' as const,
+    clientId: selectedClient?.id ?? '', clientName: selectedClient ? `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim() : '',
+    product: productName || '', phone: selectedClient?.phone ?? '', status: 'На проверке' as const,
     remainingDebt: effectiveAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
     cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
     months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
@@ -231,7 +231,7 @@ export default function CreateContractPage() {
           {/* Client section */}
           <div className="bg-white rounded-xl p-6 border border-gray-100">
             <h2 className="flex items-center gap-2 font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">
-              <span className="text-[#5B5BD6]">👤</span> Клиент <span className="text-red-500">*</span>
+              <span className="text-[#5B5BD6]">👤</span> Клиент
             </h2>
 
             {/* Toggle: existing / new client */}
@@ -391,7 +391,7 @@ export default function CreateContractPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Первый взнос</label>
+                <label className="block text-sm text-gray-700 mb-1">Первый взнос <span className="text-red-500">*</span></label>
                 <input value={firstPayment} onChange={e => setFirstPayment(e.target.value.replace(/[^\d.]/g, ''))}
                   type="text" inputMode="numeric" placeholder="0"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
@@ -413,7 +413,7 @@ export default function CreateContractPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Денежный счет <span className="text-red-500">*</span></label>
+                <label className="block text-sm text-gray-700 mb-1">Денежный счет</label>
                 <div className="relative">
                   <select value={account} onChange={e => setAccount(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
@@ -579,16 +579,16 @@ export default function CreateContractPage() {
             <div className="flex gap-2 mt-5">
               <button
                 onClick={async () => {
-                  if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
-                  await downloadContractPdf(buildDraft(), selectedClient);
+                  if (!cost || !months) { setAlertMsg('Заполните обязательные поля'); return; }
+                  await downloadContractPdf(buildDraft(), selectedClient ?? undefined);
                 }}
                 className="flex-1 flex items-center justify-center gap-1.5 border border-white/30 rounded-lg py-2.5 text-sm hover:bg-white/10 transition">
                 <FileText size={15} /> PDF
               </button>
               <button
                 onClick={() => {
-                  if (!selectedClient || !productName || !cost) { setAlertMsg('Заполните все поля'); return; }
-                  downloadContractExcel(buildDraft(), selectedClient);
+                  if (!cost || !months) { setAlertMsg('Заполните обязательные поля'); return; }
+                  downloadContractExcel(buildDraft(), selectedClient ?? undefined);
                 }}
                 className="flex-1 flex items-center justify-center gap-1.5 border border-white/30 rounded-lg py-2.5 text-sm hover:bg-white/10 transition">
                 <FileSpreadsheet size={15} /> Excel

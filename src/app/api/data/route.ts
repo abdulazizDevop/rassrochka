@@ -88,6 +88,8 @@ export async function GET() {
       accountName: r.account_name,
       accountType: r.account_type,
       profitPercent: r.profit_percent,
+      profitType: r.profit_type || 'percent',
+      profitFixed: r.profit_fixed,
       periodMonths: r.period_months,
       periodLabel: r.period_label,
     }));

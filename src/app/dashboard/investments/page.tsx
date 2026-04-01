@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import {
   Plus, Trash2, Users, Layers, Phone,
-  Building2, X, TrendingUp, Calendar, Percent, ChevronRight, Wallet
+  Building2, X, TrendingUp, Calendar, Percent, ChevronRight, Wallet, DollarSign
 } from 'lucide-react';
 import { Investor } from '@/lib/types';
 
@@ -16,15 +16,22 @@ function calcProfit(inv: Investor): {
   total: number;
   orgShare: number;
   label: string;
+  isFixed: boolean;
 } {
-  const pct = inv.profitPercent ?? 0;
   const months = inv.periodMonths ?? 1;
-  const perMonth = inv.invested * pct / 100;
+  const isFixed = inv.profitType === 'fixed';
+  let perMonth: number;
+  if (isFixed) {
+    perMonth = inv.profitFixed ?? 0;
+  } else {
+    const pct = inv.profitPercent ?? 0;
+    perMonth = inv.invested * pct / 100;
+  }
   const total = perMonth * months;
   const label = inv.periodMonths && inv.periodMonths > 1
     ? `за ${inv.periodMonths} мес.`
     : 'в месяц';
-  return { perMonth, total, orgShare: inv.invested - total, label };
+  return { perMonth, total, orgShare: inv.invested - total, label, isFixed };
 }
 
 // ─── Partner Card Modal ───────────────────────────────────────────────────────
@@ -84,10 +91,18 @@ function PartnerCard({ inv, onClose, onDelete, isViewer }: {
             <span className="font-bold text-indigo-700 text-base">{fmt(inv.invested)}</span>
           </div>
 
-          {/* Percent & period */}
-          {(inv.profitPercent !== undefined || inv.periodMonths !== undefined) && (
+          {/* Percent/Fixed & period */}
+          {(inv.profitPercent !== undefined || inv.profitFixed !== undefined || inv.periodMonths !== undefined) && (
             <div className="grid grid-cols-2 gap-3">
-              {inv.profitPercent !== undefined && (
+              {inv.profitType === 'fixed' ? (
+                <div className="bg-emerald-50 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-600 mb-1">
+                    <DollarSign size={12} /> Фикс. сумма
+                  </div>
+                  <div className="font-bold text-emerald-700 text-lg">{fmt(inv.profitFixed ?? 0)}</div>
+                  <div className="text-xs text-emerald-500">{label}</div>
+                </div>
+              ) : inv.profitPercent !== undefined ? (
                 <div className="bg-emerald-50 rounded-xl px-4 py-3">
                   <div className="flex items-center gap-1.5 text-xs text-emerald-600 mb-1">
                     <Percent size={12} /> Процент
@@ -95,7 +110,7 @@ function PartnerCard({ inv, onClose, onDelete, isViewer }: {
                   <div className="font-bold text-emerald-700 text-lg">{inv.profitPercent}%</div>
                   <div className="text-xs text-emerald-500">{label}</div>
                 </div>
-              )}
+              ) : null}
               {inv.periodMonths !== undefined && (
                 <div className="bg-amber-50 rounded-xl px-4 py-3">
                   <div className="flex items-center gap-1.5 text-xs text-amber-600 mb-1">
@@ -109,7 +124,7 @@ function PartnerCard({ inv, onClose, onDelete, isViewer }: {
           )}
 
           {/* Profit breakdown */}
-          {inv.profitPercent !== undefined && inv.profitPercent > 0 && (
+          {(perMonth > 0) && (
             <div className="border border-gray-100 rounded-xl overflow-hidden">
               <div className="bg-gray-50 px-4 py-2.5 flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                 <TrendingUp size={12} /> Расчёт прибыли
@@ -185,7 +200,9 @@ export default function InvestmentsPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newInvested, setNewInvested] = useState('');
   const [newAccountId, setNewAccountId] = useState('');
+  const [newProfitType, setNewProfitType] = useState<'percent' | 'fixed'>('percent');
   const [newPercent, setNewPercent] = useState('');
+  const [newFixed, setNewFixed] = useState('');
   const [newPeriodMonths, setNewPeriodMonths] = useState('');
 
   const filtered = investors.filter(i =>
@@ -195,20 +212,27 @@ export default function InvestmentsPage() {
 
   function resetForm() {
     setNewName(''); setNewPhone(''); setNewInvested('');
-    setNewAccountId('');
-    setNewPercent(''); setNewPeriodMonths('');
+    setNewAccountId(''); setNewProfitType('percent');
+    setNewPercent(''); setNewFixed(''); setNewPeriodMonths('');
   }
 
   function handleAdd() {
     if (!newName.trim() || !newInvested) return;
     const amt = parseFloat(newInvested.replace(/\s/g, '').replace(',', '.')) || 0;
     if (amt <= 0) return;
-    const pct = newPercent ? parseFloat(newPercent) : undefined;
     const months = newPeriodMonths ? parseInt(newPeriodMonths) : undefined;
     const selectedAccount = accounts.find(a => a.id === newAccountId);
 
-    const perMonth = pct ? amt * pct / 100 : 0;
-    const total = pct && months ? perMonth * months : perMonth;
+    let perMonth = 0;
+    const pct = newProfitType === 'percent' && newPercent ? parseFloat(newPercent) : undefined;
+    const fixed = newProfitType === 'fixed' && newFixed ? parseFloat(newFixed) : undefined;
+
+    if (newProfitType === 'fixed' && fixed) {
+      perMonth = fixed;
+    } else if (pct) {
+      perMonth = amt * pct / 100;
+    }
+    const total = months ? perMonth * months : perMonth;
 
     addInvestor({
       id: String(Date.now()),
@@ -221,7 +245,9 @@ export default function InvestmentsPage() {
       accountId: selectedAccount?.id,
       accountName: selectedAccount?.name,
       accountType: selectedAccount?.type,
+      profitType: newProfitType,
       profitPercent: pct,
+      profitFixed: fixed,
       periodMonths: months,
       periodLabel: months && months > 1 ? `за ${months} мес.` : 'в месяц',
     }, amt);
@@ -308,7 +334,12 @@ export default function InvestmentsPage() {
                       </td>
                       <td className="px-5 py-4 text-right font-semibold text-gray-900">{fmt(inv.invested)}</td>
                       <td className="px-5 py-4 text-right">
-                        {inv.profitPercent !== undefined ? (
+                        {inv.profitType === 'fixed' ? (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="font-semibold text-emerald-700">{fmt(inv.profitFixed ?? 0)}</span>
+                            <span className="text-xs text-gray-400">фикс. {inv.periodMonths && inv.periodMonths > 1 ? `за ${inv.periodMonths} мес.` : 'в мес.'}</span>
+                          </div>
+                        ) : inv.profitPercent !== undefined ? (
                           <div className="flex flex-col items-end gap-0.5">
                             <span className="font-semibold text-emerald-700">{inv.profitPercent}%</span>
                             <span className="text-xs text-gray-400">
@@ -318,7 +349,7 @@ export default function InvestmentsPage() {
                         ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        {inv.profitPercent !== undefined && inv.profitPercent > 0
+                        {profit > 0
                           ? <span className="font-bold text-green-600">{fmt(profit)}</span>
                           : <span className="text-gray-300">—</span>}
                       </td>
@@ -418,49 +449,77 @@ export default function InvestmentsPage() {
               />
             </div>
 
-            {/* Percent + period */}
+            {/* Profit type toggle */}
+            <div className="mb-4">
+              <label className="block text-sm text-gray-600 mb-1.5 font-medium">Тип доли</label>
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                <button onClick={() => setNewProfitType('percent')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition ${
+                    newProfitType === 'percent' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500'
+                  }`}>
+                  <Percent size={13} /> Процент (%)
+                </button>
+                <button onClick={() => setNewProfitType('fixed')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition ${
+                    newProfitType === 'fixed' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500'
+                  }`}>
+                  <DollarSign size={13} /> Фикс. сумма
+                </button>
+              </div>
+            </div>
+
+            {/* Profit value + period */}
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
-                <label className="block text-sm text-gray-600 mb-1.5 font-medium flex items-center gap-1">
-                  <Percent size={13} className="text-emerald-500" /> Процент (%)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={newPercent}
-                  onChange={e => setNewPercent(e.target.value)}
-                  placeholder="напр. 5"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                {newProfitType === 'percent' ? (
+                  <>
+                    <label className="block text-sm text-gray-600 mb-1.5 font-medium flex items-center gap-1">
+                      <Percent size={13} className="text-emerald-500" /> Процент (%)
+                    </label>
+                    <input type="number" min="0" max="100" step="0.1"
+                      value={newPercent} onChange={e => setNewPercent(e.target.value)}
+                      placeholder="напр. 5"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm text-gray-600 mb-1.5 font-medium flex items-center gap-1">
+                      <DollarSign size={13} className="text-indigo-500" /> Сумма (₽/мес.)
+                    </label>
+                    <input type="number" min="0"
+                      value={newFixed} onChange={e => setNewFixed(e.target.value)}
+                      placeholder="напр. 10000"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-600 mb-1.5 font-medium flex items-center gap-1">
                   <Calendar size={13} className="text-amber-500" /> Период (мес.)
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={newPeriodMonths}
-                  onChange={e => setNewPeriodMonths(e.target.value)}
+                <input type="number" min="1"
+                  value={newPeriodMonths} onChange={e => setNewPeriodMonths(e.target.value)}
                   placeholder="1 = в месяц"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
             </div>
 
             {/* Live preview */}
-            {newPercent && newInvested && parseFloat(newInvested) > 0 && (
+            {((newProfitType === 'percent' && newPercent) || (newProfitType === 'fixed' && newFixed)) && newInvested && parseFloat(newInvested) > 0 && (
               <div className="mb-4 bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-sm">
                 <div className="text-emerald-700 font-semibold mb-2 flex items-center gap-1.5">
                   <TrendingUp size={14} /> Предварительный расчёт
                 </div>
                 {(() => {
                   const amt = parseFloat(newInvested) || 0;
-                  const pct = parseFloat(newPercent) || 0;
                   const months = parseInt(newPeriodMonths) || 1;
-                  const perMonth = amt * pct / 100;
+                  let perMonth: number;
+                  if (newProfitType === 'fixed') {
+                    perMonth = parseFloat(newFixed) || 0;
+                  } else {
+                    const pct = parseFloat(newPercent) || 0;
+                    perMonth = amt * pct / 100;
+                  }
                   const total = perMonth * months;
                   return (
                     <div className="space-y-1 text-emerald-800">
