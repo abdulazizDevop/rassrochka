@@ -1,8 +1,8 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Contract, ContractStatus } from '@/lib/types';
-import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, AlertTriangle, CreditCard, X } from 'lucide-react';
+import { Contract } from '@/lib/types';
+import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, CreditCard, X } from 'lucide-react';
 import Link from 'next/link';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
@@ -77,6 +77,25 @@ function isPaymentOverdue(c: Contract): boolean {
   // If payDay already passed this month
   const payDay = c.payDay || 1;
   return now.getDate() > payDay;
+}
+
+/** How many days the payment is overdue. 0 if not overdue. */
+function getPaymentOverdueDays(c: Contract): number {
+  if (c.remainingDebt <= 0) return 0;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // If endDate already passed — count from endDate (handles 3-4 months overdue)
+  const end = parseRuDate(c.endDate);
+  if (end && end < today) {
+    return Math.floor((today.getTime() - end.getTime()) / (1000 * 60 * 60 * 24));
+  }
+  // Otherwise count from this month's payDay (if it has passed)
+  const payDay = c.payDay || 1;
+  if (now.getDate() > payDay) {
+    const dueDate = new Date(now.getFullYear(), now.getMonth(), payDay);
+    return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+  }
+  return 0;
 }
 
 function LabeledSelect({
@@ -210,11 +229,12 @@ function UpcomingCard({ contract, onPay, isViewer }: {
   isViewer: boolean;
 }) {
   const days = getDaysUntilPayment(contract);
-  const isOverdue = contract.status === 'Просрочен' || isPaymentOverdue(contract);
+  const overdueDays = getPaymentOverdueDays(contract);
+  const isOverdue = contract.status === 'Просрочен' || overdueDays > 0;
   const urgent = days <= 1 || isOverdue;
 
   const badgeText = isOverdue
-    ? (contract.status === 'Просрочен' ? 'Просрочен' : 'Не оплачен')
+    ? (overdueDays > 0 ? `Просрочено ${overdueDays} дн.` : 'Просрочен')
     : days === 0 ? 'Сегодня' : days === 1 ? 'Завтра' : `Через ${days} дн.`;
 
   return (
@@ -375,8 +395,18 @@ export default function ContractsPage() {
 
   const renderStatus = (c: Contract) => {
     if (c.status === 'Просрочен') {
-      const days = getOverdueDays(c.endDate);
-      return <span className="text-red-500 font-medium">{days > 0 ? `Просрочен на ${days} день` : 'Просрочен'}</span>;
+      const days = getPaymentOverdueDays(c) || getOverdueDays(c.endDate);
+      return <span className="text-red-500 font-medium">{days > 0 ? `Просрочен ${days} дн.` : 'Просрочен'}</span>;
+    }
+    // Show overdue days even for "В процессе" if payment is missed
+    const overdueDays = getPaymentOverdueDays(c);
+    if (overdueDays > 0) {
+      return (
+        <span className="flex flex-col">
+          <span className={`font-medium ${STATUS_COLORS[c.status] || 'text-gray-700'}`}>{c.status}</span>
+          <span className="text-xs text-red-500 font-medium">⚠ Просрочено {overdueDays} дн.</span>
+        </span>
+      );
     }
     return <span className={`font-medium ${STATUS_COLORS[c.status] || 'text-gray-700'}`}>{c.status}</span>;
   };
