@@ -428,21 +428,23 @@ export default function ContractsPage() {
           }`}>
           <FileText size={15} /> Все договоры
         </button>
-        <button onClick={() => setTab('upcoming')}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition ${
-            tab === 'upcoming' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}>
-          <Clock size={15} /> Ближайшие оплаты
-          {upcomingContracts.length > 0 && (
-            <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {upcomingContracts.length}
-            </span>
-          )}
-        </button>
+        {!isViewer && (
+          <button onClick={() => setTab('upcoming')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition ${
+              tab === 'upcoming' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <Clock size={15} /> Ближайшие оплаты
+            {upcomingContracts.length > 0 && (
+              <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {upcomingContracts.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* ─── Tab: Upcoming Payments ─── */}
-      {tab === 'upcoming' && (
+      {tab === 'upcoming' && !isViewer && (
         <div>
           {upcomingContracts.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-100 py-16 text-center">
