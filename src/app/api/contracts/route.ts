@@ -84,8 +84,33 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
     const db = getDb();
+    // Find the contract first to know its number for cascade
+    const contract = db.prepare('SELECT number FROM contracts WHERE id = ?').get(id) as { number: number } | undefined;
+
+    if (contract) {
+      const marker = `#${contract.number}`;
+      // Cascade: revert account balances from linked ledger entries
+      const linked = db.prepare(`SELECT account_id, operation, amount FROM ledger WHERE note LIKE ?`).all(`%${marker}%`) as { account_id: string; operation: string; amount: number }[];
+      const balanceDelta: Record<string, number> = {};
+      for (const e of linked) {
+        if (!e.account_id) continue;
+        if (e.operation === 'Пополнение' || e.operation === 'Платёж клиента' || e.operation === 'Новый договор') {
+          balanceDelta[e.account_id] = (balanceDelta[e.account_id] || 0) - e.amount;
+        } else if (e.operation === 'Списание') {
+          balanceDelta[e.account_id] = (balanceDelta[e.account_id] || 0) + e.amount;
+        }
+      }
+      const updateAcc = db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?');
+      for (const [accId, delta] of Object.entries(balanceDelta)) {
+        updateAcc.run(delta, accId);
+      }
+      // Delete linked ledger entries
+      db.prepare('DELETE FROM ledger WHERE note LIKE ?').run(`%${marker}%`);
+    }
+
     db.prepare('DELETE FROM contracts WHERE id = ?').run(id);
 
     return NextResponse.json({ ok: true });
