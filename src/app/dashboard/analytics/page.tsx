@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ChevronDown } from 'lucide-react';
 import { motion, useInView, AnimatePresence, type Variants } from 'framer-motion';
@@ -48,33 +48,43 @@ function MountainChart({
   const [dims, setDims] = useState({ w: 480, h: 200 });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  useMemo(() => {
+  useEffect(() => {
     if (!containerRef.current) return;
     const ro = new ResizeObserver(entries => {
       for (const e of entries) {
-        setDims({ w: e.contentRect.width, h: 200 });
+        const w = e.contentRect.width;
+        if (w > 0 && isFinite(w)) setDims({ w, h: 200 });
       }
     });
     ro.observe(containerRef.current);
     return () => ro.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const W = dims.w;
+  const W = Math.max(dims.w, 100);
   const H = dims.h;
   const PAD = { top: 16, bottom: 32, left: 36, right: 12 };
-  const innerW = W - PAD.left - PAD.right;
-  const innerH = H - PAD.top - PAD.bottom;
+  const innerW = Math.max(W - PAD.left - PAD.right, 0);
+  const innerH = Math.max(H - PAD.top - PAD.bottom, 0);
 
-  const max = Math.max(...data.map(d => d[dataKey]), 1);
+  // Sanitize values: skip NaN/undefined
+  const safeVals = data.map(d => {
+    const v = d[dataKey];
+    return typeof v === 'number' && isFinite(v) ? v : 0;
+  });
+  const max = Math.max(...safeVals, 1);
   const yTicks = [0, 0.25, 0.5, 0.75, 1];
 
-  const pts = data.map((d, i) => ({
-    x: PAD.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW),
-    y: PAD.top + innerH - (d[dataKey] / max) * innerH,
-    val: d[dataKey],
-    label: d.month,
-  }));
+  const pts = data.map((d, i) => {
+    const val = safeVals[i];
+    const x = PAD.left + (data.length === 1 ? innerW / 2 : (i / Math.max(data.length - 1, 1)) * innerW);
+    const y = PAD.top + innerH - (val / max) * innerH;
+    return {
+      x: isFinite(x) ? x : PAD.left,
+      y: isFinite(y) ? y : PAD.top + innerH,
+      val,
+      label: d.month,
+    };
+  });
 
   // Smooth cubic bezier path
   function smoothPath(points: { x: number; y: number }[]) {
@@ -240,7 +250,8 @@ function AnimatedArc({ pct, color, size = 100, stroke = 14 }: { pct: number; col
   const inView = useInView(ref, { once: true });
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
-  const dash = circ * Math.min(pct / 100, 1);
+  const safePct = typeof pct === 'number' && isFinite(pct) ? Math.max(0, Math.min(pct, 100)) : 0;
+  const dash = circ * (safePct / 100);
 
   return (
     <svg ref={ref} width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
@@ -264,10 +275,11 @@ function AnimNum({ value, fmt: fmtFn = fmt }: { value: number; fmt?: (n: number)
   const inView = useInView(ref, { once: true });
   const [display, setDisplay] = useState(0);
 
-  useMemo(() => {
+  useEffect(() => {
     if (!inView) return;
+    const end = typeof value === 'number' && isFinite(value) ? value : 0;
+    if (end === 0) { setDisplay(0); return; }
     let start = 0;
-    const end = value;
     const dur = 900;
     const step = 16;
     const inc = (end / dur) * step;
@@ -277,7 +289,6 @@ function AnimNum({ value, fmt: fmtFn = fmt }: { value: number; fmt?: (n: number)
       if (start >= end) clearInterval(timer);
     }, step);
     return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inView, value]);
 
   return <span ref={ref}>{fmtFn(display)}</span>;
@@ -518,18 +529,20 @@ export default function AnalyticsPage() {
       return Math.round(contracts.reduce((s, c) => s + c.cost, 0) / contracts.length);
     }, [contracts]);
 
-      const monthlyChartData = useMemo(() => {
+  const monthlyChartData = useMemo(() => {
     const map: Record<string, { month: string; income: number; expenses: number }> = {};
     ledger.forEach(e => {
       const d = parseDate(e.date);
       if (!d) return;
+      const amt = typeof e.amount === 'number' && isFinite(e.amount) ? e.amount : 0;
+      if (amt === 0) return;
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const label = `${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
       if (!map[key]) map[key] = { month: label, income: 0, expenses: 0 };
       if (e.operation === 'Платёж клиента' || e.operation === 'Пополнение') {
-        map[key].income += e.amount;
+        map[key].income += amt;
       } else if (e.operation === 'Списание' || e.operation === 'Новый договор') {
-        map[key].expenses += e.amount;
+        map[key].expenses += amt;
       }
     });
     return Object.entries(map)

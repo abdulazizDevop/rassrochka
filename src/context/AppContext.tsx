@@ -308,66 +308,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteContract = useCallback((id: string) => {
-    setContracts(prev => {
-      const c = prev.find(x => x.id === id);
-      if (!c) return prev.filter(x => x.id !== id);
+    // 1. Compute everything upfront from current state (no nested setState)
+    const c = contracts.find(x => x.id === id);
+    if (!c) return;
 
-      // Find all ledger entries linked to this contract (note contains "#NUMBER")
-      const marker = `#${c.number}`;
-      setLedger(prevLedger => {
-        const linked = prevLedger.filter(e => e.note?.includes(marker));
-        // Reverse account balances: deposits subtract, withdrawals add back
-        const balanceDelta: Record<string, number> = {};
-        for (const e of linked) {
-          if (!e.accountId) continue;
-          if (e.operation === 'Пополнение' || e.operation === 'Платёж клиента' || e.operation === 'Новый договор') {
-            balanceDelta[e.accountId] = (balanceDelta[e.accountId] || 0) - e.amount;
-          } else if (e.operation === 'Списание') {
-            balanceDelta[e.accountId] = (balanceDelta[e.accountId] || 0) + e.amount;
-          }
-        }
-        // Apply balance changes
-        if (Object.keys(balanceDelta).length > 0) {
-          setAccounts(prevAccs => {
-            const updated = prevAccs.map(a => balanceDelta[a.id] !== undefined ? { ...a, balance: a.balance + balanceDelta[a.id] } : a);
-            for (const accId of Object.keys(balanceDelta)) {
-              const acc = updated.find(a => a.id === accId);
-              if (acc) {
-                fetch('/api/accounts', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: accId, balance: acc.balance }),
-                }).catch(() => {});
-              }
-            }
-            return updated;
-          });
-        }
-        // Remove linked entries from DB
-        fetch(`/api/ledger?notePattern=${encodeURIComponent(marker)}`, { method: 'DELETE' }).catch(() => {});
-        return prevLedger.filter(e => !e.note?.includes(marker));
-      });
+    const marker = `#${c.number}`;
+    const linkedLedger = ledger.filter(e => e.note?.includes(marker));
 
-      const auditEntry: AuditLogEntry = {
-        id: String(Date.now()),
-        timestamp: nowTimestamp(),
-        employee: 'Админ',
-        action: 'Удаление',
-        section: 'Договоры',
-        entity: `Договор #${c.number} (${c.clientName})`,
-        details: `Договор удалён · ${c.product} · ${c.cost.toLocaleString('ru-RU')} ₽ · все связанные операции отменены`,
-      };
-      setAuditLog(al => [auditEntry, ...al]);
-      fetch('/api/audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(auditEntry),
-      }).catch(() => {});
+    // 2. Calculate balance reversal deltas
+    const balanceDelta: Record<string, number> = {};
+    for (const e of linkedLedger) {
+      if (!e.accountId) continue;
+      if (e.operation === 'Пополнение' || e.operation === 'Платёж клиента' || e.operation === 'Новый договор') {
+        balanceDelta[e.accountId] = (balanceDelta[e.accountId] || 0) - e.amount;
+      } else if (e.operation === 'Списание') {
+        balanceDelta[e.accountId] = (balanceDelta[e.accountId] || 0) + e.amount;
+      }
+    }
 
-      return prev.filter(x => x.id !== id);
-    });
+    // 3. Build the audit entry
+    const auditEntry: AuditLogEntry = {
+      id: String(Date.now()),
+      timestamp: nowTimestamp(),
+      employee: 'Админ',
+      action: 'Удаление',
+      section: 'Договоры',
+      entity: `Договор #${c.number} (${c.clientName})`,
+      details: `Договор удалён · ${c.product} · ${c.cost.toLocaleString('ru-RU')} ₽ · все связанные операции отменены`,
+    };
+
+    // 4. Apply all state updates (pure updaters, no side effects)
+    setContracts(prev => prev.filter(x => x.id !== id));
+    setLedger(prev => prev.filter(e => !e.note?.includes(marker)));
+    if (Object.keys(balanceDelta).length > 0) {
+      setAccounts(prev => prev.map(a =>
+        balanceDelta[a.id] !== undefined ? { ...a, balance: a.balance + balanceDelta[a.id] } : a
+      ));
+    }
+    setAuditLog(prev => [auditEntry, ...prev]);
+
+    // 5. All side effects after state updates — each runs exactly once
     fetch(`/api/contracts?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  }, []);
+    fetch(`/api/ledger?notePattern=${encodeURIComponent(marker)}`, { method: 'DELETE' }).catch(() => {});
+    for (const [accId, delta] of Object.entries(balanceDelta)) {
+      const acc = accounts.find(a => a.id === accId);
+      if (acc) {
+        fetch('/api/accounts', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: accId, balance: acc.balance + delta }),
+        }).catch(() => {});
+      }
+    }
+    fetch('/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(auditEntry),
+    }).catch(() => {});
+  }, [contracts, ledger, accounts]);
 
   const updateContract = useCallback((id: string, updates: Partial<Contract>) => {
     setContracts(prev => {

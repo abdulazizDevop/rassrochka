@@ -455,8 +455,9 @@ function PassportModal({ client, onClose, isViewer }: {
 }
 
 // ── Row with hover preview ──────────────────────────────────────────────────
-function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit, onProfile }: {
+function ClientRow({ client, contractsCount, isViewer, onManagePhotos, onDelete, onEdit, onProfile }: {
   client: Client;
+  contractsCount: number;
   isViewer: boolean;
   onManagePhotos: (c: Client) => void;
   onDelete: (id: string) => void;
@@ -489,7 +490,7 @@ function ClientRow({ client, isViewer, onManagePhotos, onDelete, onEdit, onProfi
       </td>
       <td className="px-4 py-3 text-gray-700">{client.phone}</td>
       <td className="px-4 py-3 text-gray-500">{client.address || '-'}</td>
-      <td className="px-4 py-3 text-gray-700">{client.contractsCount}</td>
+      <td className="px-4 py-3 text-gray-700">{contractsCount}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           {!isViewer && (
@@ -642,6 +643,7 @@ export default function ClientsPage() {
               <ClientRow
                 key={c.id}
                 client={c}
+                contractsCount={contracts.filter(ct => ct.clientId === c.id).length}
                 isViewer={isViewer}
                 onManagePhotos={setPassportClient}
                 onDelete={deleteClient}
