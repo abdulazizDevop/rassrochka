@@ -345,7 +345,12 @@ export default function ContractsPage() {
   }, [contracts]);
 
   const filtered = useMemo(() => {
-    let result = contracts;
+    // Hide fully paid/written-off contracts by default — only active ones (and overdue) are shown
+    // If user explicitly filters by these statuses, show them
+    const hiddenStatuses = new Set(['Погашен', 'Досрочно погашен', 'Списан']);
+    let result = statusFilter === 'Все' || !hiddenStatuses.has(statusFilter)
+      ? contracts.filter(c => !hiddenStatuses.has(c.status))
+      : contracts;
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(c =>
@@ -500,7 +505,10 @@ export default function ContractsPage() {
             <LabeledSelect label="Источники" value={sourceFilter} options={SOURCES} onChange={setSourceFilter} />
           </div>
 
-          <p className="text-sm text-gray-500 mb-3">Показано {filtered.length} из {contracts.length} записей</p>
+          <p className="text-sm text-gray-500 mb-3">
+            Показано {filtered.length} из {contracts.filter(c => c.status !== 'Погашен' && c.status !== 'Досрочно погашен' && c.status !== 'Списан').length} активных
+            {contracts.length !== filtered.length && <span className="text-gray-400"> · погашенные скрыты</span>}
+          </p>
 
           <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
             <table className="w-full text-sm">
