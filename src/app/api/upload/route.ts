@@ -3,6 +3,8 @@ import { getDb } from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 
+export const dynamic = 'force-dynamic';
+
 // App Router handles body parsing automatically — no config needed
 
 // POST /api/upload — multipart form upload, saves to /public/uploads/

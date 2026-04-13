@@ -11,16 +11,10 @@ let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (_db) return _db;
-  const existed = fs.existsSync(DB_PATH);
-  const sizeBefore = existed ? fs.statSync(DB_PATH).size : 0;
-  console.log(`[DB] Opening: ${DB_PATH} | existed: ${existed} | size: ${sizeBefore}`);
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   _db = new Database(DB_PATH);
   _db.pragma('journal_mode = WAL');
   initSchema(_db);
-  const clients = (_db.prepare('SELECT COUNT(*) as c FROM clients').get() as { c: number }).c;
-  const accs = (_db.prepare('SELECT id FROM accounts').all() as { id: string }[]).map(a => a.id);
-  console.log(`[DB] After init: clients=${clients}, accounts=[${accs.join(',')}]`);
   return _db;
 }
 

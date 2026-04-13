@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const camelToSnakeMap: Record<string, string> = {
   createdAt: 'created_at',
   endDate: 'end_date',

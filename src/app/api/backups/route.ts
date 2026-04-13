@@ -3,6 +3,8 @@ import { getDb } from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 
+export const dynamic = 'force-dynamic';
+
 const BACKUPS_DIR = path.join(process.cwd(), 'backups');
 
 function nowStr() {

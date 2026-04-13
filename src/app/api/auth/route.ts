@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, bcrypt } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 interface UserRow { login: string; password: string; name: string; role: string; }
 
 export async function POST(req: NextRequest) {

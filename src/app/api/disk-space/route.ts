@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { execSync } from 'child_process';
 import os from 'os';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     let freeBytes = 0;

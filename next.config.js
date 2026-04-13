@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  serverExternalPackages: ['better-sqlite3'],
   experimental: {
     instrumentationHook: true,
+    serverComponentsExternalPackages: ['better-sqlite3'],
   },
   async headers() {
     return [

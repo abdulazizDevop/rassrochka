@@ -3,6 +3,8 @@ import { getDb } from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 
+export const dynamic = 'force-dynamic';
+
 const TEMPLATES_DIR = path.join(process.cwd(), 'public', 'templates');
 
 // GET — list all templates
