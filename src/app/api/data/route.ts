@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import path from 'path';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     const db = getDb();
+
+    // DEBUG: check what singleton actually sees
+    const singletonClients = (db.prepare('SELECT COUNT(*) as c FROM clients').get() as { c: number }).c;
+    const singletonAccounts = (db.prepare('SELECT id FROM accounts').all() as { id: string }[]).map(a => a.id);
+    console.log(`[API/data] SINGLETON: clients=${singletonClients}, accounts=[${singletonAccounts}]`);
 
     // --- Clients ---
     const clientsRaw = db.prepare('SELECT * FROM clients').all() as Record<string, unknown>[];
