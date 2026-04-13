@@ -96,6 +96,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [backups, setBackups] = useState<BackupEntry[]>([]);
 
+  // Helper: persist to API with error logging and optional state rollback
+  const apiCall = useCallback(async (url: string, options: RequestInit) => {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error(`API error ${res.status} ${options.method ?? 'GET'} ${url}:`, text);
+      }
+      return res;
+    } catch (err) {
+      console.error(`API fetch failed ${options.method ?? 'GET'} ${url}:`, err);
+      return null;
+    }
+  }, []);
+
+  // Reload all data from DB — used on mount and can be called after suspected inconsistency
+  const reloadFromDb = useCallback(async () => {
+    try {
+      const res = await fetch('/api/data');
+      if (!res.ok) {
+        console.error('Failed to load data from API, status:', res.status);
+        return;
+      }
+      const data = await res.json();
+      if (!data) return;
+      if (data.clients) setClients(data.clients); else setClients([]);
+      if (data.contracts) setContracts(data.contracts); else setContracts([]);
+      if (data.accounts) setAccounts(data.accounts);
+      if (data.ledger) setLedger(data.ledger); else setLedger([]);
+      if (data.investors) setInvestors(data.investors); else setInvestors([]);
+      if (data.investPools) setInvestPools(data.investPools); else setInvestPools([]);
+      if (data.transfers) setTransfers(data.transfers); else setTransfers([]);
+      if (data.auditLog) setAuditLog(data.auditLog); else setAuditLog([]);
+      if (data.settings) setSettings(prev => ({ ...prev, ...data.settings }));
+      if (data.tariffs) setTariffs(data.tariffs); else setTariffs([]);
+      if (data.products) setProducts(data.products); else setProducts([]);
+    } catch (err) {
+      console.error('Failed to reload data from DB:', err);
+    }
+  }, []);
+
   // Load all data from database on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -108,26 +149,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch { /* ignore */ }
     }
 
-    // Fetch all data from DB
-    fetch('/api/data')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!data) return;
-        if (data.clients) setClients(data.clients);
-        if (data.contracts) setContracts(data.contracts);
-        if (data.accounts) setAccounts(data.accounts);
-        if (data.ledger) setLedger(data.ledger);
-        if (data.investors) setInvestors(data.investors);
-        if (data.investPools) setInvestPools(data.investPools);
-        if (data.transfers) setTransfers(data.transfers);
-        if (data.auditLog) setAuditLog(data.auditLog);
-        if (data.settings) setSettings(data.settings);
-        if (data.tariffs) setTariffs(data.tariffs);
-        if (data.products) setProducts(data.products);
-      })
-      .catch(() => { /* ignore fetch errors on initial load */ })
-      .finally(() => setHydrated(true));
-  }, []);
+    reloadFromDb().finally(() => setHydrated(true));
+  }, [reloadFromDb]);
 
   const addAuditEntry = useCallback((entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'employee'>) => {
     const full: AuditLogEntry = {
@@ -137,12 +160,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       employee: currentUser?.name ?? 'Система',
     };
     setAuditLog(prev => [full, ...prev]);
-    fetch('/api/audit', {
+    apiCall('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(full),
-    }).catch(() => {});
-  }, [currentUser]);
+    });
+  }, [currentUser, apiCall]);
 
   const login = useCallback((username: string, password: string) => {
     const found = users.find(u => u.login === username && u.password === password);
@@ -283,29 +306,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addContract = useCallback((contract: Contract) => {
     setContracts(prev => [...prev, contract]);
-    // Persist to DB
-    fetch('/api/contracts', {
+    apiCall('/api/contracts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contract),
-    }).catch(() => {});
+    });
 
     const auditEntry: AuditLogEntry = {
       id: String(Date.now()),
       timestamp: nowTimestamp(),
-      employee: 'Админ',
+      employee: currentUser?.name ?? 'Админ',
       action: 'Создание',
       section: 'Договоры',
       entity: `Договор #${contract.number} (${contract.clientName})`,
       details: `Новый договор на сумму ${contract.cost.toLocaleString('ru-RU')} ₽ · ${contract.product}`,
     };
     setAuditLog(prev => [auditEntry, ...prev]);
-    fetch('/api/audit', {
+    apiCall('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auditEntry),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall, currentUser]);
 
   const deleteContract = useCallback((id: string) => {
     // 1. Compute everything upfront from current state (no nested setState)
@@ -348,24 +370,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAuditLog(prev => [auditEntry, ...prev]);
 
     // 5. All side effects after state updates — each runs exactly once
-    fetch(`/api/contracts?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-    fetch(`/api/ledger?notePattern=${encodeURIComponent(marker)}`, { method: 'DELETE' }).catch(() => {});
+    apiCall(`/api/contracts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    apiCall(`/api/ledger?notePattern=${encodeURIComponent(marker)}`, { method: 'DELETE' });
     for (const [accId, delta] of Object.entries(balanceDelta)) {
       const acc = accounts.find(a => a.id === accId);
       if (acc) {
-        fetch('/api/accounts', {
+        apiCall('/api/accounts', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: accId, balance: acc.balance + delta }),
-        }).catch(() => {});
+        });
       }
     }
-    fetch('/api/audit', {
+    apiCall('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auditEntry),
-    }).catch(() => {});
-  }, [contracts, ledger, accounts]);
+    });
+  }, [contracts, ledger, accounts, apiCall]);
 
   const updateContract = useCallback((id: string, updates: Partial<Contract>) => {
     setContracts(prev => {
@@ -379,62 +401,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const auditEntry: AuditLogEntry = {
             id: String(Date.now()),
             timestamp: nowTimestamp(),
-            employee: 'Админ',
+            employee: currentUser?.name ?? 'Админ',
             action: 'Редактирование',
             section: 'Договоры',
             entity: `Договор #${c.number} (${c.clientName})`,
             details: changed,
           };
           setAuditLog(al => [auditEntry, ...al]);
-          fetch('/api/audit', {
+          apiCall('/api/audit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(auditEntry),
-          }).catch(() => {});
+          });
         }
       }
       return prev.map(x => x.id === id ? { ...x, ...updates } : x);
     });
-    fetch('/api/contracts', {
+    apiCall('/api/contracts', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...updates }),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall, currentUser]);
 
   const addClient = useCallback((client: Client) => {
     setClients(prev => [...prev, client]);
-    fetch('/api/clients', {
+    // Send client without passportPhotos (photos are saved separately via /api/photos)
+    const { passportPhotos, ...clientForDb } = client as Client & { passportPhotos?: string[] };
+    apiCall('/api/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(client),
-    }).catch(() => {});
+      body: JSON.stringify(clientForDb),
+    });
 
     const auditEntry: AuditLogEntry = {
       id: String(Date.now()),
       timestamp: nowTimestamp(),
-      employee: 'Админ',
+      employee: currentUser?.name ?? 'Админ',
       action: 'Создание',
       section: 'Клиенты',
       entity: `${client.lastName} ${client.firstName}`,
       details: `Добавлен клиент · ${client.phone}`,
     };
     setAuditLog(prev => [auditEntry, ...prev]);
-    fetch('/api/audit', {
+    apiCall('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auditEntry),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall, currentUser]);
 
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(x => x.id === id ? { ...x, ...updates } : x));
-    fetch('/api/clients', {
+    apiCall('/api/clients', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...updates }),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall]);
 
   const deleteClient = useCallback((id: string) => {
     setClients(prev => {
@@ -443,23 +467,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const auditEntry: AuditLogEntry = {
           id: String(Date.now()),
           timestamp: nowTimestamp(),
-          employee: 'Админ',
+          employee: currentUser?.name ?? 'Админ',
           action: 'Удаление',
           section: 'Клиенты',
           entity: `${c.lastName} ${c.firstName}`,
           details: `Клиент удалён · ${c.phone}`,
         };
         setAuditLog(al => [auditEntry, ...al]);
-        fetch('/api/audit', {
+        apiCall('/api/audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(auditEntry),
-        }).catch(() => {});
+        });
       }
       return prev.filter(x => x.id !== id);
     });
-    fetch(`/api/clients?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  }, []);
+    apiCall(`/api/clients?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall, currentUser]);
 
   const transferBetweenAccounts = useCallback((fromId: string, toId: string, amount: number, comment: string) => {
     let success = false;
@@ -477,35 +501,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const date = nowStr();
       const transferEntry: Transfer = { id: String(Date.now()), fromAccountId: fromId, toAccountId: toId, amount, comment, date };
       setTransfers(prev => [transferEntry, ...prev]);
-      fetch('/api/transfers', {
+      apiCall('/api/transfers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transferEntry),
-      }).catch(() => {});
+      });
 
       // Update both accounts in DB
       setAccounts(current => {
         const fromAcc = current.find(a => a.id === fromId);
         const toAcc = current.find(a => a.id === toId);
         if (fromAcc) {
-          fetch('/api/accounts', {
+          apiCall('/api/accounts', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: fromId, balance: fromAcc.balance }),
-          }).catch(() => {});
+          });
         }
         if (toAcc) {
-          fetch('/api/accounts', {
+          apiCall('/api/accounts', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: toId, balance: toAcc.balance }),
-          }).catch(() => {});
+          });
         }
 
         const ledgerEntry: LedgerEntry = {
           id: String(Date.now()),
           date,
-          user: 'Админ',
+          user: currentUser?.name ?? 'Админ',
           operation: 'Перевод между счетами',
           amount,
           accountId: toId,
@@ -513,43 +537,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           note: comment || `Перевод из "${fromAcc?.name}" в "${toAcc?.name}"`,
         };
         setLedger(prev => [ledgerEntry, ...prev]);
-        fetch('/api/ledger', {
+        apiCall('/api/ledger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(ledgerEntry),
-        }).catch(() => {});
+        });
 
         const auditEntry: AuditLogEntry = {
           id: String(Date.now() + 1),
           timestamp: nowTimestamp(),
-          employee: 'Админ',
+          employee: currentUser?.name ?? 'Админ',
           action: 'Создание',
           section: 'Баланс',
           entity: `Перевод ${amount.toLocaleString('ru-RU')} ₽`,
           details: `Из "${fromAcc?.name}" в "${toAcc?.name}"${comment ? ` · ${comment}` : ''}`,
         };
         setAuditLog(al => [auditEntry, ...al]);
-        fetch('/api/audit', {
+        apiCall('/api/audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(auditEntry),
-        }).catch(() => {});
+        });
         return current;
       });
     }
     return success;
-  }, []);
+  }, [apiCall, currentUser]);
 
   const depositAccount = useCallback((accountId: string, amount: number, note: string) => {
     setAccounts(prev => {
       const updated = prev.map(a => a.id === accountId ? { ...a, balance: a.balance + amount } : a);
       const acc = updated.find(a => a.id === accountId);
       if (acc) {
-        fetch('/api/accounts', {
+        apiCall('/api/accounts', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: accountId, balance: acc.balance }),
-        }).catch(() => {});
+          body: JSON.stringify({ id: accountId, balance: acc.balance, orgBalance: acc.orgBalance, investorsBalance: acc.investorsBalance, investPoolBalance: acc.investPoolBalance }),
+        });
       }
       return updated;
     });
@@ -558,7 +582,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const ledgerEntry: LedgerEntry = {
       id: String(Date.now()),
       date,
-      user: 'Админ',
+      user: currentUser?.name ?? 'Админ',
       operation: 'Пополнение',
       amount,
       accountId,
@@ -566,28 +590,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       note: note || 'Пополнение счёта',
     };
     setLedger(prev => [ledgerEntry, ...prev]);
-    fetch('/api/ledger', {
+    apiCall('/api/ledger', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ledgerEntry),
-    }).catch(() => {});
+    });
 
     const auditEntry: AuditLogEntry = {
       id: String(Date.now() + 1),
       timestamp: nowTimestamp(),
-      employee: 'Админ',
+      employee: currentUser?.name ?? 'Админ',
       action: 'Создание',
       section: 'Баланс',
       entity: `Пополнение ${amount.toLocaleString('ru-RU')} ₽`,
       details: `Счёт: ${accName}${note ? ` · ${note}` : ''}`,
     };
     setAuditLog(prev => [auditEntry, ...prev]);
-    fetch('/api/audit', {
+    apiCall('/api/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auditEntry),
-    }).catch(() => {});
-  }, [accounts]);
+    });
+  }, [accounts, apiCall, currentUser]);
 
   const withdrawAccount = useCallback((accountId: string, amount: number, note: string, isOperational: boolean) => {
     let success = false;
@@ -598,11 +622,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = prev.map(a => a.id === accountId ? { ...a, balance: a.balance - amount } : a);
       const updatedAcc = updated.find(a => a.id === accountId);
       if (updatedAcc) {
-        fetch('/api/accounts', {
+        apiCall('/api/accounts', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: accountId, balance: updatedAcc.balance }),
-        }).catch(() => {});
+          body: JSON.stringify({ id: accountId, balance: updatedAcc.balance, orgBalance: updatedAcc.orgBalance, investorsBalance: updatedAcc.investorsBalance, investPoolBalance: updatedAcc.investPoolBalance }),
+        });
       }
       return updated;
     });
@@ -612,7 +636,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const ledgerEntry: LedgerEntry = {
         id: String(Date.now()),
         date,
-        user: 'Админ',
+        user: currentUser?.name ?? 'Админ',
         operation: 'Списание',
         amount,
         accountId,
@@ -621,52 +645,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isOperationalExpense: isOperational,
       };
       setLedger(prev => [ledgerEntry, ...prev]);
-      fetch('/api/ledger', {
+      apiCall('/api/ledger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ledgerEntry),
-      }).catch(() => {});
+      });
 
       const auditEntry: AuditLogEntry = {
         id: String(Date.now() + 1),
         timestamp: nowTimestamp(),
-        employee: 'Админ',
+        employee: currentUser?.name ?? 'Админ',
         action: 'Создание',
         section: 'Баланс',
         entity: `Списание ${amount.toLocaleString('ru-RU')} ₽`,
         details: `Счёт: ${accName}${note ? ` · ${note}` : ''}`,
       };
       setAuditLog(prev => [auditEntry, ...prev]);
-      fetch('/api/audit', {
+      apiCall('/api/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(auditEntry),
-      }).catch(() => {});
+      });
     }
     return success;
-  }, [accounts]);
+  }, [accounts, apiCall, currentUser]);
 
     const addAccount = useCallback((account: Account) => {
     setAccounts(prev => [...prev, account]);
-    fetch('/api/accounts', {
+    apiCall('/api/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(account),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall]);
 
   const deleteAccount = useCallback((id: string) => {
     setAccounts(prev => prev.filter(a => a.id !== id));
-    fetch(`/api/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  }, []);
+    apiCall(`/api/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall]);
 
     const addInvestor = useCallback((investor: Investor, depositAmount?: number) => {
       setInvestors(prev => [...prev, investor]);
-      fetch('/api/investors', {
+      apiCall('/api/investors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(investor),
-      }).catch(() => {});
+      });
 
       // Add invested amount to the linked account balance
       if (depositAmount && depositAmount > 0 && investor.accountId) {
@@ -676,11 +700,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           );
           const acc = updated.find(a => a.id === investor.accountId);
           if (acc) {
-            fetch('/api/accounts', {
+            apiCall('/api/accounts', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ id: investor.accountId, balance: acc.balance, investorsBalance: acc.investorsBalance }),
-            }).catch(() => {});
+            });
           }
           return updated;
         });
@@ -696,11 +720,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           note: `Вложение партнёра: ${investor.name}`,
         };
         setLedger(prev => [ledgerEntry, ...prev]);
-        fetch('/api/ledger', {
+        apiCall('/api/ledger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(ledgerEntry),
-        }).catch(() => {});
+        });
       }
       const auditEntry: AuditLogEntry = {
         id: String(Date.now() + 1),
@@ -712,12 +736,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         details: `Добавлен партнёр · вложено ${investor.invested.toLocaleString('ru-RU')} ₽${investor.accountName ? ` · счёт: ${investor.accountName}` : ''}`,
       };
       setAuditLog(prev => [auditEntry, ...prev]);
-      fetch('/api/audit', {
+      apiCall('/api/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(auditEntry),
-      }).catch(() => {});
-    }, [currentUser]);
+      });
+    }, [currentUser, apiCall]);
 
   const deleteInvestor = useCallback((id: string) => {
     setInvestors(prev => {
@@ -726,23 +750,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const auditEntry: AuditLogEntry = {
           id: String(Date.now()),
           timestamp: nowTimestamp(),
-          employee: 'Админ',
+          employee: currentUser?.name ?? 'Админ',
           action: 'Удаление',
           section: 'Инвестиции',
           entity: inv.name,
           details: `Инвестор удалён · было вложено ${inv.invested.toLocaleString('ru-RU')} ₽`,
         };
         setAuditLog(al => [auditEntry, ...al]);
-        fetch('/api/audit', {
+        apiCall('/api/audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(auditEntry),
-        }).catch(() => {});
+        });
       }
       return prev.filter(x => x.id !== id);
     });
-    fetch(`/api/investors?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  }, []);
+    apiCall(`/api/investors?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall, currentUser]);
 
   const updateSettings = useCallback((updates: Partial<AppSettings>) => {
     setSettings(prev => {
@@ -754,61 +778,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const auditEntry: AuditLogEntry = {
           id: String(Date.now()),
           timestamp: nowTimestamp(),
-          employee: 'Админ',
+          employee: currentUser?.name ?? 'Админ',
           action: 'Редактирование',
           section: 'Настройки',
           entity: '#1',
           details: changed,
         };
         setAuditLog(al => [auditEntry, ...al]);
-        fetch('/api/audit', {
+        apiCall('/api/audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(auditEntry),
-        }).catch(() => {});
+        });
       }
       return { ...prev, ...updates };
     });
-    // Persist settings to DB
-    fetch('/api/settings', {
+    apiCall('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall, currentUser]);
 
   const addTariff = useCallback((tariff: Tariff) => {
     setTariffs(prev => [...prev, tariff]);
-    fetch('/api/tariffs', {
+    apiCall('/api/tariffs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tariff),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall]);
 
   const updateTariff = useCallback((id: string, updates: Partial<Tariff>) => {
     setTariffs(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    fetch('/api/tariffs', {
+    apiCall('/api/tariffs', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...updates }),
-    }).catch(() => {});
-  }, []);
+    });
+  }, [apiCall]);
 
   const deleteTariff = useCallback((id: string) => {
     setTariffs(prev => prev.filter(t => t.id !== id));
-    fetch(`/api/tariffs?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  }, []);
+    apiCall(`/api/tariffs?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall]);
 
   const addProduct = useCallback((product: Product) => {
     setProducts(prev => [...prev, product]);
-    fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) }).catch(() => {});
-  }, []);
+    apiCall('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) });
+  }, [apiCall]);
 
   const deleteProduct = useCallback((id: string) => {
     setProducts(prev => prev.filter(p => p.id !== id));
-    fetch(`/api/products?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-  }, []);
+    apiCall(`/api/products?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall]);
 
   const createBackup = useCallback(() => {
     const now = new Date();
