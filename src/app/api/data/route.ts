@@ -46,6 +46,9 @@ export async function GET() {
       payDay: r.pay_day,
       comment: r.comment,
       approved: r.approved === 1,
+      useEffectiveTerm: r.use_effective_term === 1,
+      effectiveMonths: r.effective_months,
+      effectiveDays: r.effective_days,
     }));
 
     // --- Accounts ---

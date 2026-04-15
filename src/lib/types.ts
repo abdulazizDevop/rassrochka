@@ -37,6 +37,12 @@ export interface Contract {
   payDay: number;
   comment?: string;
   approved?: boolean;
+  /** When true, contract uses effectiveMonths/effectiveDays for payment calc (existing partial debts) */
+  useEffectiveTerm?: boolean;
+  /** Remaining months for calc when useEffectiveTerm = true. months stays as historical total. */
+  effectiveMonths?: number;
+  /** Alternative: remaining days (for sub-monthly terms) */
+  effectiveDays?: number;
 }
 
 export interface Partner {

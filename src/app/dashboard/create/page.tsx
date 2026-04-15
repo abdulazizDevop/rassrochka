@@ -68,6 +68,10 @@ export default function CreateContractPage() {
   const [comment, setComment] = useState('');
   // Custom total override for discount
   const [customTotal, setCustomTotal] = useState('');
+  // "Время учитывать" — for existing partial debts
+  const [useEffectiveTerm, setUseEffectiveTerm] = useState(false);
+  const [effectiveUnit, setEffectiveUnit] = useState<'months' | 'days'>('months');
+  const [effectiveValue, setEffectiveValue] = useState('');
 
   // Client mode: 'search' (existing) or 'new'
   const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
@@ -103,8 +107,15 @@ export default function CreateContractPage() {
   const effectiveAfterFirst = effectiveTotal - firstPaymentNum;
   const discountAmount = hasDiscount ? systemTotal - customTotalNum : 0;
 
-  const monthly = monthsNum > 0 ? Math.ceil(effectiveAfterFirst / monthsNum) : 0;
-  const total = firstPaymentNum + monthly * monthsNum;
+  // Effective term values — for "Время учитывать" feature
+  const effectiveValueNum = parseInt(effectiveValue) || 0;
+  // Number of effective payment installments (in months) for monthly calc
+  const effectiveInstallments = useEffectiveTerm
+    ? (effectiveUnit === 'months' ? effectiveValueNum : Math.max(1, Math.ceil(effectiveValueNum / 30)))
+    : monthsNum;
+
+  const monthly = effectiveInstallments > 0 ? Math.ceil(effectiveAfterFirst / effectiveInstallments) : 0;
+  const total = firstPaymentNum + monthly * effectiveInstallments;
   const remainingDebt = effectiveAfterFirst;
 
   // Reset custom total when inputs change
@@ -112,12 +123,30 @@ export default function CreateContractPage() {
     setCustomTotal('');
   }, [cost, firstPayment, markup]);
 
+  // Parse startDate (DD.MM.YYYY) into Date — used for schedule base
+  function parseStartDate(s: string): Date {
+    const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!m) return new Date();
+    return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  }
+
   const paymentSchedule = useMemo(() => {
-    if (monthsNum <= 0) return [];
+    const baseDate = parseStartDate(startDate);
+    // Days-based schedule (only when useEffectiveTerm + days)
+    if (useEffectiveTerm && effectiveUnit === 'days' && effectiveValueNum > 0) {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + effectiveValueNum);
+      return [{
+        month: 1,
+        date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        amount: monthly,
+      }];
+    }
+    if (effectiveInstallments <= 0) return [];
     const schedule = [];
-    const now = new Date();
-    for (let i = 0; i < monthsNum; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i + 1, payDayNum);
+    for (let i = 0; i < effectiveInstallments; i++) {
+      // First payment is 1 month after startDate
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i + 1, payDayNum);
       schedule.push({
         month: i + 1,
         date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -125,7 +154,7 @@ export default function CreateContractPage() {
       });
     }
     return schedule;
-  }, [monthsNum, monthly, payDayNum]);
+  }, [effectiveInstallments, monthly, payDayNum, startDate, useEffectiveTerm, effectiveUnit, effectiveValueNum]);
 
   const clientResults = useMemo(() => {
     if (!clientSearch) return [];
@@ -194,6 +223,9 @@ export default function CreateContractPage() {
       payDay: payDayNum,
       comment,
       approved: false,
+      useEffectiveTerm,
+      effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
+      effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,
     };
     addContract(newContract);
     if (firstPaymentNum > 0) {
@@ -216,6 +248,9 @@ export default function CreateContractPage() {
     remainingDebt: effectiveAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
     cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
     months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
+    useEffectiveTerm,
+    effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
+    effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,
   });
 
   return (
@@ -445,6 +480,54 @@ export default function CreateContractPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]" />
               </div>
             </div>
+          </div>
+
+          {/* Время учитывать — for existing partial debts */}
+          <div className="bg-white rounded-xl p-6 border border-gray-100">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useEffectiveTerm}
+                onChange={e => setUseEffectiveTerm(e.target.checked)}
+                className="mt-1 w-4 h-4 accent-[#5B5BD6] cursor-pointer"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-gray-800">Время учитывать</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Для существующих договоров: укажите фактически оставшийся срок. Срок рассрочки сохраняется как есть (для истории), а расчёт идёт по оставшемуся времени.
+                </div>
+              </div>
+            </label>
+            {useEffectiveTerm && (
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Единица</label>
+                  <div className="relative">
+                    <select
+                      value={effectiveUnit}
+                      onChange={e => setEffectiveUnit(e.target.value as 'months' | 'days')}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white"
+                    >
+                      <option value="months">Месяцы</option>
+                      <option value="days">Дни</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">
+                    Осталось {effectiveUnit === 'months' ? 'месяцев' : 'дней'}
+                  </label>
+                  <input
+                    value={effectiveValue}
+                    onChange={e => setEffectiveValue(e.target.value.replace(/\D/g, ''))}
+                    type="text" inputMode="numeric"
+                    placeholder={effectiveUnit === 'months' ? 'напр. 2' : 'напр. 30'}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Comment */}

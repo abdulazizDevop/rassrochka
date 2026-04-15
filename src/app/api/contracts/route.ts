@@ -15,6 +15,9 @@ const camelToSnakeMap: Record<string, string> = {
   firstPayment: 'first_payment',
   startDate: 'start_date',
   payDay: 'pay_day',
+  useEffectiveTerm: 'use_effective_term',
+  effectiveMonths: 'effective_months',
+  effectiveDays: 'effective_days',
 };
 
 function toSnake(key: string): string {
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
       id, number, createdAt, endDate, clientId, clientName, product, phone,
       status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost,
       markup, firstPayment, months, source, tariff, account, startDate, payDay,
-      comment, approved,
+      comment, approved, useEffectiveTerm, effectiveMonths, effectiveDays,
     } = body;
 
     const db = getDb();
@@ -37,13 +40,14 @@ export async function POST(req: NextRequest) {
         id, number, created_at, end_date, client_id, client_name, product, phone,
         status, remaining_debt, monthly_payment, payment_status, cost, purchase_cost,
         markup, first_payment, months, source, tariff, account, start_date, pay_day,
-        comment, approved
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        comment, approved, use_effective_term, effective_months, effective_days
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id, number, createdAt, endDate, clientId, clientName, product, phone,
       status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost ?? null,
       markup, firstPayment, months, source, tariff, account, startDate, payDay,
-      comment ?? null, approved ? 1 : 0
+      comment ?? null, approved ? 1 : 0,
+      useEffectiveTerm ? 1 : 0, effectiveMonths ?? null, effectiveDays ?? null
     );
 
     return NextResponse.json({ ok: true, id });
@@ -64,7 +68,11 @@ export async function PATCH(req: NextRequest) {
     for (const [key, value] of Object.entries(updates)) {
       const column = toSnake(key);
       setClauses.push(`${column} = ?`);
-      values.push(key === 'approved' ? (value ? 1 : 0) : value);
+      if (key === 'approved' || key === 'useEffectiveTerm') {
+        values.push(value ? 1 : 0);
+      } else {
+        values.push(value);
+      }
     }
 
     if (setClauses.length === 0) {

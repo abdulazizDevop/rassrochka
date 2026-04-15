@@ -55,10 +55,23 @@ function getOverdueDays(endDate: string): number {
   return diff > 0 ? Math.floor(diff / (1000 * 60 * 60 * 24)) : 0;
 }
 
+/** First payment date — always 1 month after startDate, on payDay */
+function getFirstPaymentDate(c: Contract): Date | null {
+  const start = parseRuDate(c.startDate || c.createdAt);
+  if (!start) return null;
+  const payDay = c.payDay || 1;
+  return new Date(start.getFullYear(), start.getMonth() + 1, payDay);
+}
+
 /** How many days until the next payment for this contract */
 function getDaysUntilPayment(c: Contract): number {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const firstPay = getFirstPaymentDate(c);
+  // If contract is brand new and the first payment hasn't arrived yet
+  if (firstPay && today < firstPay) {
+    return Math.floor((firstPay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }
   const payDay = c.payDay || 1;
   let next = new Date(now.getFullYear(), now.getMonth(), payDay);
   // If payDay already passed this month, next payment is next month
@@ -66,11 +79,14 @@ function getDaysUntilPayment(c: Contract): number {
   return Math.floor((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/** Is the contract's payment overdue (payDay passed this month, or endDate already passed) */
+/** Is the contract's payment overdue (first payment passed, or endDate already passed) */
 function isPaymentOverdue(c: Contract): boolean {
   if (c.remainingDebt <= 0) return false;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // First payment hasn't arrived yet — never overdue
+  const firstPay = getFirstPaymentDate(c);
+  if (firstPay && today < firstPay) return false;
   // If contract endDate has passed — definitely overdue
   const end = parseRuDate(c.endDate);
   if (end && end < today) return true;
@@ -84,6 +100,9 @@ function getPaymentOverdueDays(c: Contract): number {
   if (c.remainingDebt <= 0) return 0;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // First payment hasn't arrived yet — not overdue
+  const firstPay = getFirstPaymentDate(c);
+  if (firstPay && today < firstPay) return 0;
   // If endDate already passed — count from endDate (handles 3-4 months overdue)
   const end = parseRuDate(c.endDate);
   if (end && end < today) {

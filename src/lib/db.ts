@@ -52,30 +52,33 @@ function initSchema(db: Database.Database) {
     );
 
     CREATE TABLE IF NOT EXISTS contracts (
-      id              TEXT PRIMARY KEY,
-      number          INTEGER NOT NULL,
-      created_at      TEXT NOT NULL,
-      end_date        TEXT NOT NULL,
-      client_id       TEXT NOT NULL,
-      client_name     TEXT NOT NULL,
-      product         TEXT NOT NULL,
-      phone           TEXT NOT NULL,
-      status          TEXT NOT NULL,
-      remaining_debt  REAL NOT NULL DEFAULT 0,
-      monthly_payment REAL NOT NULL DEFAULT 0,
-      payment_status  TEXT NOT NULL,
-      cost            REAL NOT NULL DEFAULT 0,
-      purchase_cost   REAL,
-      markup          REAL NOT NULL DEFAULT 0,
-      first_payment   REAL NOT NULL DEFAULT 0,
-      months          INTEGER NOT NULL,
-      source          TEXT NOT NULL DEFAULT '',
-      tariff          TEXT NOT NULL DEFAULT '',
-      account         TEXT NOT NULL DEFAULT '',
-      start_date      TEXT NOT NULL,
-      pay_day         INTEGER NOT NULL DEFAULT 1,
-      comment         TEXT,
-      approved        INTEGER NOT NULL DEFAULT 0
+      id                  TEXT PRIMARY KEY,
+      number              INTEGER NOT NULL,
+      created_at          TEXT NOT NULL,
+      end_date            TEXT NOT NULL,
+      client_id           TEXT NOT NULL,
+      client_name         TEXT NOT NULL,
+      product             TEXT NOT NULL,
+      phone               TEXT NOT NULL,
+      status              TEXT NOT NULL,
+      remaining_debt      REAL NOT NULL DEFAULT 0,
+      monthly_payment     REAL NOT NULL DEFAULT 0,
+      payment_status      TEXT NOT NULL,
+      cost                REAL NOT NULL DEFAULT 0,
+      purchase_cost       REAL,
+      markup              REAL NOT NULL DEFAULT 0,
+      first_payment       REAL NOT NULL DEFAULT 0,
+      months              INTEGER NOT NULL,
+      source              TEXT NOT NULL DEFAULT '',
+      tariff              TEXT NOT NULL DEFAULT '',
+      account             TEXT NOT NULL DEFAULT '',
+      start_date          TEXT NOT NULL,
+      pay_day             INTEGER NOT NULL DEFAULT 1,
+      comment             TEXT,
+      approved            INTEGER NOT NULL DEFAULT 0,
+      use_effective_term  INTEGER NOT NULL DEFAULT 0,
+      effective_months    INTEGER,
+      effective_days      INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS accounts (
@@ -173,6 +176,19 @@ function initSchema(db: Database.Database) {
       created_at    TEXT NOT NULL
     );
   `);
+
+  // Migrate: add effective term columns to contracts if missing
+  const contractCols = db.prepare('PRAGMA table_info(contracts)').all() as { name: string }[];
+  const colNames = new Set(contractCols.map(c => c.name));
+  if (!colNames.has('use_effective_term')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN use_effective_term INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!colNames.has('effective_months')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN effective_months INTEGER');
+  }
+  if (!colNames.has('effective_days')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN effective_days INTEGER');
+  }
 
   // Migrate plaintext passwords to bcrypt hashes
   const rows = db.prepare('SELECT login, password FROM users').all() as { login: string; password: string }[];
