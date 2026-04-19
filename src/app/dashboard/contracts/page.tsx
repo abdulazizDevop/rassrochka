@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Contract } from '@/lib/types';
-import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, CreditCard, X } from 'lucide-react';
+import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, CreditCard, X, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
@@ -241,6 +241,154 @@ function PaymentModal({ contract, onClose, onPay }: {
   );
 }
 
+/* ─── Edit Contract Modal ─── */
+function EditContractModal({ contract, onClose, onSave }: {
+  contract: Contract;
+  onClose: () => void;
+  onSave: (id: string, updates: Partial<Contract>) => void;
+}) {
+  const [product, setProduct] = useState(contract.product);
+  const [cost, setCost] = useState(String(contract.cost));
+  const [purchaseCost, setPurchaseCost] = useState(String(contract.purchaseCost ?? ''));
+  const [firstPayment, setFirstPayment] = useState(String(contract.firstPayment));
+  const [months, setMonths] = useState(String(contract.months));
+  const [payDay, setPayDay] = useState(String(contract.payDay));
+  const [startDate, setStartDate] = useState(contract.startDate);
+  const [comment, setComment] = useState(contract.comment ?? '');
+  const [status, setStatus] = useState(contract.status);
+  const [paymentStatus, setPaymentStatus] = useState(contract.paymentStatus);
+  const [remainingDebt, setRemainingDebt] = useState(String(contract.remainingDebt));
+  const [monthlyPayment, setMonthlyPayment] = useState(String(contract.monthlyPayment));
+
+  function handleSave() {
+    const updates: Partial<Contract> = {
+      product,
+      cost: parseFloat(cost) || 0,
+      purchaseCost: parseFloat(purchaseCost) || 0,
+      firstPayment: parseFloat(firstPayment) || 0,
+      months: parseInt(months) || 0,
+      payDay: parseInt(payDay) || 1,
+      startDate,
+      comment,
+      status,
+      paymentStatus,
+      remainingDebt: parseFloat(remainingDebt) || 0,
+      monthlyPayment: parseFloat(monthlyPayment) || 0,
+    };
+    onSave(contract.id, updates);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900">Редактировать договор #{contract.number}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
+            Клиент: <strong>{contract.clientName}</strong> · {contract.phone}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Товар</label>
+              <input value={product} onChange={e => setProduct(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Стоимость</label>
+              <input value={cost} onChange={e => setCost(e.target.value.replace(/[^\d.]/g, ''))}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Закупочная стоимость</label>
+              <input value={purchaseCost} onChange={e => setPurchaseCost(e.target.value.replace(/[^\d.]/g, ''))}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Первый взнос</label>
+              <input value={firstPayment} onChange={e => setFirstPayment(e.target.value.replace(/[^\d.]/g, ''))}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Срок (месяцев)</label>
+              <input value={months} onChange={e => setMonths(e.target.value.replace(/\D/g, ''))}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Число оплаты</label>
+              <input value={payDay} onChange={e => {
+                const v = e.target.value.replace(/\D/g, '');
+                const n = parseInt(v);
+                if (v === '' || (n >= 1 && n <= 31)) setPayDay(v);
+              }}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Дата начала</label>
+              <input value={startDate} onChange={e => setStartDate(e.target.value)}
+                placeholder="ДД.ММ.ГГГГ"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Ежемесячный платеж</label>
+              <input value={monthlyPayment} onChange={e => setMonthlyPayment(e.target.value.replace(/[^\d.]/g, ''))}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Остаток долга</label>
+              <input value={remainingDebt} onChange={e => setRemainingDebt(e.target.value.replace(/[^\d.]/g, ''))}
+                inputMode="numeric"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Статус</label>
+              <select value={status} onChange={e => setStatus(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6] bg-white">
+                {DEFAULT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Статус оплаты</label>
+              <select value={paymentStatus} onChange={e => setPaymentStatus(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6] bg-white">
+                {DEFAULT_PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-700 mb-1">Комментарий</label>
+            <textarea value={comment} onChange={e => setComment(e.target.value)}
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6] resize-none" />
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={handleSave}
+            className="flex-1 bg-[#5B5BD6] text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-[#4a4ac4] transition">
+            Сохранить
+          </button>
+          <button onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition">
+            Отмена
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Upcoming Payments Card ─── */
 function UpcomingCard({ contract, onPay, isViewer }: {
   contract: Contract;
@@ -330,6 +478,7 @@ export default function ContractsPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [payContract, setPayContract] = useState<Contract | null>(null);
+  const [editContract, setEditContract] = useState<Contract | null>(null);
   const colRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -587,6 +736,11 @@ export default function ContractsPage() {
                           <FileSpreadsheet size={16} />
                         </button>
                         {!isViewer && (
+                          <button onClick={() => setEditContract(c)} title="Редактировать" className="text-gray-400 hover:text-[#5B5BD6] transition">
+                            <Pencil size={16} />
+                          </button>
+                        )}
+                        {!isViewer && (
                           <button onClick={() => setDeleteId(c.id)} className="text-gray-400 hover:text-red-500 transition">
                             <Trash2 size={16} />
                           </button>
@@ -607,6 +761,15 @@ export default function ContractsPage() {
       {/* Payment Modal */}
       {payContract && (
         <PaymentModal contract={payContract} onClose={() => setPayContract(null)} onPay={handlePay} />
+      )}
+
+      {/* Edit Contract Modal */}
+      {editContract && (
+        <EditContractModal
+          contract={editContract}
+          onClose={() => setEditContract(null)}
+          onSave={updateContract}
+        />
       )}
 
       {/* Delete Modal */}

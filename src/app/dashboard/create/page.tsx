@@ -100,11 +100,12 @@ export default function CreateContractPage() {
   const systemTotal = costNum + markupAmount; // system-calculated total (cost + markup on remainder)
   const amountAfterFirst = systemTotal - firstPaymentNum; // what's left to pay in installments
 
-  // Custom total logic (discount)
+  // Custom total logic — use the manually entered total as-is when set (works for both discount & increase)
   const customTotalNum = parseFloat(customTotal) || 0;
-  const hasDiscount = customTotal !== '' && customTotalNum < systemTotal;
-  const effectiveTotal = hasDiscount ? customTotalNum : systemTotal;
+  const hasCustomTotal = customTotal !== '' && customTotalNum > 0;
+  const effectiveTotal = hasCustomTotal ? customTotalNum : systemTotal;
   const effectiveAfterFirst = effectiveTotal - firstPaymentNum;
+  const hasDiscount = hasCustomTotal && customTotalNum < systemTotal;
   const discountAmount = hasDiscount ? systemTotal - customTotalNum : 0;
 
   // Effective term values — for "Время учитывать" feature
@@ -207,7 +208,7 @@ export default function CreateContractPage() {
       clientName: selectedClient ? `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim() : '',
       product: productName || '',
       phone: selectedClient?.phone ?? '',
-      status: 'На проверке' as const,
+      status: 'В процессе' as const,
       remainingDebt: finalDebt,
       monthlyPayment: monthly,
       paymentStatus: 'Новый договор' as const,
@@ -222,7 +223,7 @@ export default function CreateContractPage() {
       startDate,
       payDay: payDayNum,
       comment,
-      approved: false,
+      approved: true,
       useEffectiveTerm,
       effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
       effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,
@@ -244,10 +245,10 @@ export default function CreateContractPage() {
     id: 'draft', number: contracts.length + 1, createdAt: startDate,
     endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
     clientId: selectedClient?.id ?? '', clientName: selectedClient ? `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim() : '',
-    product: productName || '', phone: selectedClient?.phone ?? '', status: 'На проверке' as const,
+    product: productName || '', phone: selectedClient?.phone ?? '', status: 'В процессе' as const,
     remainingDebt: effectiveAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
     cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
-    months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: false,
+    months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: true,
     useEffectiveTerm,
     effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
     effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,

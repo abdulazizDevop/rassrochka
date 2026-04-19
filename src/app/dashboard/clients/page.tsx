@@ -455,17 +455,15 @@ function PassportModal({ client, onClose, isViewer }: {
 }
 
 // ── Row with hover preview ──────────────────────────────────────────────────
-function ClientRow({ client, contractsCount, isViewer, onManagePhotos, onDelete, onEdit, onProfile }: {
+function ClientRow({ client, contractsCount, isViewer, onManagePhotos, onEdit, onProfile }: {
   client: Client;
   contractsCount: number;
   isViewer: boolean;
   onManagePhotos: (c: Client) => void;
-  onDelete: (id: string) => void;
   onEdit: (c: Client) => void;
   onProfile: (c: Client) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const nameRef = useRef<HTMLSpanElement>(null);
   const fullName = `${client.lastName} ${client.firstName} ${client.middleName}`.trim() || `${client.firstName} ${client.middleName}`.trim();
 
@@ -511,49 +509,16 @@ function ClientRow({ client, contractsCount, isViewer, onManagePhotos, onDelete,
           >
             <Camera size={14} />
           </button>
-          {!isViewer && (
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-lg p-2 transition"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
         </div>
       </td>
     </tr>
-    {showDeleteModal && (
-      <tr><td colSpan={5} className="p-0 border-none">
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowDeleteModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash2 size={20} className="text-red-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Удалить клиента?</h3>
-            </div>
-            <p className="text-sm text-gray-500 mb-6">Клиент <strong>{fullName}</strong> будет удалён навсегда.</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                Отмена
-              </button>
-              <button onClick={() => { onDelete(client.id); setShowDeleteModal(false); }}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition">
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
-      </td></tr>
-    )}
     </>
   );
 }
 
 // ── Main page ───────────────────────────────────────────────────────────────
 export default function ClientsPage() {
-  const { clients, contracts, ledger, deleteClient, updateClient, currentUser } = useApp();
+  const { clients, contracts, ledger, updateClient, currentUser } = useApp();
   const isViewer = currentUser?.role === 'viewer';
   const [search, setSearch] = useState('');
   const [passportClient, setPassportClient] = useState<Client | null>(null);
@@ -646,7 +611,6 @@ export default function ClientsPage() {
                 contractsCount={contracts.filter(ct => ct.clientId === c.id).length}
                 isViewer={isViewer}
                 onManagePhotos={setPassportClient}
-                onDelete={deleteClient}
                 onEdit={setEditClient}
                 onProfile={setProfileClient}
               />

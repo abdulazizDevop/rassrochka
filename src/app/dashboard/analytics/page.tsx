@@ -342,7 +342,9 @@ export default function AnalyticsPage() {
   const writtenOffContracts = contracts.filter(c => c.status === 'Списан');
   const writtenOffDebt = writtenOffContracts.reduce((s, c) => s + (c.remainingDebt || 0), 0);
 
-  const income = filteredContracts.reduce((s, c) => s + (c.cost || 0), 0);
+  // Income = full sale price (cost + markup) — markup is the main profit from installment service
+  const income = filteredContracts.reduce((s, c) => s + (c.cost || 0) + (c.markup || 0), 0);
+  // Expenses = what we paid for the product. If purchaseCost is unknown, fall back to cost (zero margin from product itself)
   const expenses = filteredContracts.reduce((s, c) => s + (c.purchaseCost ?? c.cost ?? 0), 0);
 
   const operationalExpenses = useMemo(() => {
@@ -385,7 +387,7 @@ export default function AnalyticsPage() {
   const cashSum = cashPayments.reduce((s, e) => s + e.amount, 0);
 
   const ltv = allActive.length > 0
-    ? Math.round(allActive.reduce((s, c) => s + c.cost, 0) / allActive.length)
+    ? Math.round(allActive.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / allActive.length)
     : 0;
   const avgMonths = filteredContracts.length > 0
     ? (filteredContracts.reduce((s, c) => s + (c.months || 0), 0) / filteredContracts.length).toFixed(1)
@@ -395,7 +397,7 @@ export default function AnalyticsPage() {
   const collectability = expectedPayments > 0 ? ((paidMonthly / expectedPayments) * 100).toFixed(1) : '0';
   const collectNum = Number(collectability);
 
-  const totalGoodsValue = contracts.reduce((s, c) => s + c.cost, 0);
+  const totalGoodsValue = contracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0);
   const totalCostValue = contracts.reduce((s, c) => s + (c.purchaseCost ?? c.cost), 0);
   const totalFirstPayment = contracts.reduce((s, c) => s + (c.firstPayment || 0), 0);
 
@@ -439,12 +441,12 @@ export default function AnalyticsPage() {
       const key = c.product || 'Без названия';
       if (!map[key]) map[key] = { count: 0, revenue: 0 };
       map[key].count++;
-      map[key].revenue += c.cost;
+      map[key].revenue += c.cost + (c.markup || 0);
     });
     return Object.entries(map).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 3);
   }, [contracts]);
   const topProductRevenue = productGroups.reduce((s, entry) => s + entry[1].revenue, 0);
-  const contractProductMargin = contracts.reduce((s, c) => s + (c.cost - (c.purchaseCost ?? c.cost)), 0);
+  const contractProductMargin = contracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost ?? c.cost)), 0);
   const productCount = new Set(contracts.map(c => c.product || '')).size;
 
   const totalInvested = investors.reduce((s, i) => s + i.invested, 0);
@@ -460,7 +462,7 @@ export default function AnalyticsPage() {
       return d && d >= cutoff;
     });
   }, [contracts]);
-  const last3Profit = last3MonthsContracts.reduce((s, c) => s + (c.cost - (c.purchaseCost ?? c.cost)), 0);
+  const last3Profit = last3MonthsContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost ?? c.cost)), 0);
   const forecastBetter = actualProfit >= last3Profit / 3;
   const forecastIncome = allActive.reduce((s, c) => s + c.monthlyPayment, 0);
   const forecastDebt = allActive.reduce((s, c) => s + (c.remainingDebt || 0), 0);
@@ -478,7 +480,7 @@ export default function AnalyticsPage() {
         const label = d.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
         if (!map[key]) map[key] = { label, count: 0, revenue: 0, avgInstallment: 0, installments: [] };
         map[key].count++;
-        map[key].revenue += c.cost;
+        map[key].revenue += c.cost + (c.markup || 0);
         if (c.monthlyPayment > 0) map[key].installments.push(c.monthlyPayment);
       });
       return Object.entries(map)
@@ -502,7 +504,7 @@ export default function AnalyticsPage() {
         const key = c.product || 'Не указан';
         if (!map[key]) map[key] = { name: key, count: 0, revenue: 0, avgCost: 0, costs: [] };
         map[key].count++;
-        map[key].revenue += c.cost;
+        map[key].revenue += c.cost + (c.markup || 0);
         map[key].costs.push(c.cost);
       });
       return Object.values(map)
@@ -526,7 +528,7 @@ export default function AnalyticsPage() {
 
     const avgContractSum = useMemo(() => {
       if (!contracts.length) return 0;
-      return Math.round(contracts.reduce((s, c) => s + c.cost, 0) / contracts.length);
+      return Math.round(contracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / contracts.length);
     }, [contracts]);
 
   const monthlyChartData = useMemo(() => {

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import {
-  FileText, PlusCircle, ShieldCheck, Users,
+  FileText, PlusCircle, Users,
   Wallet, TrendingUp, BarChart2, Package,
   ClipboardList, Archive, Settings, LogOut
 } from 'lucide-react';
@@ -11,7 +11,6 @@ import {
 const navItems = [
   { href: '/dashboard/contracts', label: 'Договоры', icon: FileText },
   { href: '/dashboard/create', label: 'Создать', icon: PlusCircle },
-  { href: '/dashboard/security', label: 'Отд. безопасности', icon: ShieldCheck },
   { href: '/dashboard/clients', label: 'Клиенты', icon: Users },
   { href: '/dashboard/balance', label: 'Баланс', icon: Wallet },
   { href: '/dashboard/investments', label: 'Инвестиции', icon: TrendingUp },
