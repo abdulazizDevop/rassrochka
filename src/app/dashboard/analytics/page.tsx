@@ -386,20 +386,23 @@ export default function AnalyticsPage() {
   const cashPayments = payments.filter(p => !p.note?.toLowerCase().includes('карт'));
   const cashSum = cashPayments.reduce((s, e) => s + e.amount, 0);
 
-  const ltv = allActive.length > 0
-    ? Math.round(allActive.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / allActive.length)
+  // LTV: average contract revenue across filtered active contracts
+  const filteredActive = filteredContracts.filter(c => c.status === 'В процессе');
+  const ltv = filteredActive.length > 0
+    ? Math.round(filteredActive.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / filteredActive.length)
     : 0;
   const avgMonths = filteredContracts.length > 0
     ? (filteredContracts.reduce((s, c) => s + (c.months || 0), 0) / filteredContracts.length).toFixed(1)
     : '0';
-  const expectedPayments = allActive.reduce((s, c) => s + c.monthlyPayment, 0);
-  const paidMonthly = allActive.filter(c => c.paymentStatus === 'Оплачено').reduce((s, c) => s + c.monthlyPayment, 0);
+  const expectedPayments = filteredActive.reduce((s, c) => s + c.monthlyPayment, 0);
+  const paidMonthly = filteredActive.filter(c => c.paymentStatus === 'Оплачено').reduce((s, c) => s + c.monthlyPayment, 0);
   const collectability = expectedPayments > 0 ? ((paidMonthly / expectedPayments) * 100).toFixed(1) : '0';
   const collectNum = Number(collectability);
 
-  const totalGoodsValue = contracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0);
-  const totalCostValue = contracts.reduce((s, c) => s + (c.purchaseCost ?? c.cost), 0);
-  const totalFirstPayment = contracts.reduce((s, c) => s + (c.firstPayment || 0), 0);
+  // Goods totals — respect date/source filter
+  const totalGoodsValue = filteredContracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0);
+  const totalCostValue = filteredContracts.reduce((s, c) => s + (c.purchaseCost ?? c.cost), 0);
+  const totalFirstPayment = filteredContracts.reduce((s, c) => s + (c.firstPayment || 0), 0);
 
   const overdueAvgStr = useMemo(() => {
     if (!overdueContracts.length) return 'нет';
@@ -415,6 +418,7 @@ export default function AnalyticsPage() {
 
   const incomeOps = useMemo(() => {
     return ledger.filter(e => {
+      // Only actual cash inflows: customer payments and manual deposits (not contract creation)
       if (e.operation !== 'Платёж клиента' && e.operation !== 'Пополнение') return false;
       const d = parseDate(e.date);
       if (!d) return false;
@@ -426,7 +430,8 @@ export default function AnalyticsPage() {
 
   const expenseOps = useMemo(() => {
     return ledger.filter(e => {
-      if (e.operation !== 'Списание' && e.operation !== 'Новый договор') return false;
+      // Only actual cash outflows: withdrawals. "Новый договор" is a sale, not an expense.
+      if (e.operation !== 'Списание') return false;
       const d = parseDate(e.date);
       if (!d) return false;
       if (dFrom && d < dFrom) return false;
@@ -437,17 +442,17 @@ export default function AnalyticsPage() {
 
   const productGroups = useMemo(() => {
     const map: Record<string, { count: number; revenue: number }> = {};
-    contracts.forEach(c => {
+    filteredContracts.forEach(c => {
       const key = c.product || 'Без названия';
       if (!map[key]) map[key] = { count: 0, revenue: 0 };
       map[key].count++;
       map[key].revenue += c.cost + (c.markup || 0);
     });
     return Object.entries(map).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 3);
-  }, [contracts]);
+  }, [filteredContracts]);
   const topProductRevenue = productGroups.reduce((s, entry) => s + entry[1].revenue, 0);
-  const contractProductMargin = contracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost ?? c.cost)), 0);
-  const productCount = new Set(contracts.map(c => c.product || '')).size;
+  const contractProductMargin = filteredContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost ?? c.cost)), 0);
+  const productCount = new Set(filteredContracts.map(c => c.product || '')).size;
 
   const totalInvested = investors.reduce((s, i) => s + i.invested, 0);
   const totalOrgProfit = investors.reduce((s, i) => s + i.orgProfit, 0);
@@ -531,26 +536,42 @@ export default function AnalyticsPage() {
       return Math.round(contracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / contracts.length);
     }, [contracts]);
 
+  // Monthly chart: income = full contract value (cost + markup) grouped by creation month.
+  // expenses = purchase cost + operational expenses grouped by ledger date.
   const monthlyChartData = useMemo(() => {
-    const map: Record<string, { month: string; income: number; expenses: number }> = {};
+    const map: Record<string, { month: string; income: number; expenses: number; _sortKey: string }> = {};
+    const upsert = (d: Date) => {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = `${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+      if (!map[key]) map[key] = { month: label, income: 0, expenses: 0, _sortKey: key };
+      return map[key];
+    };
+    // Income from contract sales (cost + markup)
+    contracts.forEach(c => {
+      const d = parseDate(c.startDate || c.createdAt);
+      if (!d) return;
+      upsert(d).income += (c.cost || 0) + (c.markup || 0);
+    });
+    // Expenses from purchase cost (recorded on contract creation month)
+    contracts.forEach(c => {
+      const d = parseDate(c.startDate || c.createdAt);
+      if (!d) return;
+      const pc = c.purchaseCost ?? c.cost ?? 0;
+      if (pc > 0) upsert(d).expenses += pc;
+    });
+    // Plus operational expenses from ledger
     ledger.forEach(e => {
+      if (!e.isOperationalExpense) return;
       const d = parseDate(e.date);
       if (!d) return;
       const amt = typeof e.amount === 'number' && isFinite(e.amount) ? e.amount : 0;
       if (amt === 0) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = `${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
-      if (!map[key]) map[key] = { month: label, income: 0, expenses: 0 };
-      if (e.operation === 'Платёж клиента' || e.operation === 'Пополнение') {
-        map[key].income += amt;
-      } else if (e.operation === 'Списание' || e.operation === 'Новый договор') {
-        map[key].expenses += amt;
-      }
+      upsert(d).expenses += amt;
     });
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(entry => entry[1]);
-  }, [ledger]);
+    return Object.values(map)
+      .sort((a, b) => a._sortKey.localeCompare(b._sortKey))
+      .map(({ _sortKey, ...rest }) => rest);
+  }, [contracts, ledger]);
 
   const containerVariants: Variants = {
     hidden: {},
