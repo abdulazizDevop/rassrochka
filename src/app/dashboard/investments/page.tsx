@@ -296,16 +296,16 @@ export default function InvestmentsPage() {
             placeholder="Поиск по имени или телефону..."
             className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm w-full sm:w-80 mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
           />
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 text-xs">
-                  <th className="text-left px-5 py-3 font-medium">Имя</th>
-                  <th className="text-left px-5 py-3 font-medium">Телефон</th>
-                  <th className="text-left px-5 py-3 font-medium">Счёт</th>
-                  <th className="text-right px-5 py-3 font-medium">Вложено</th>
-                  <th className="text-right px-5 py-3 font-medium">% / Период</th>
-                  <th className="text-right px-5 py-3 font-medium">Прибыль партнёра</th>
+                  <th className="text-left px-5 py-3 font-medium whitespace-nowrap">Имя</th>
+                  <th className="text-left px-5 py-3 font-medium whitespace-nowrap">Телефон</th>
+                  <th className="text-left px-5 py-3 font-medium whitespace-nowrap">Счёт</th>
+                  <th className="text-right px-5 py-3 font-medium whitespace-nowrap">Вложено</th>
+                  <th className="text-right px-5 py-3 font-medium whitespace-nowrap">% / Период</th>
+                  <th className="text-right px-5 py-3 font-medium whitespace-nowrap">Прибыль партнёра</th>
                   <th className="px-5 py-3"></th>
                 </tr>
               </thead>
@@ -366,14 +366,14 @@ export default function InvestmentsPage() {
       )}
 
       {tab === 'pools' && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 text-xs">
-                <th className="text-left px-5 py-3 font-medium">Название</th>
-                <th className="text-right px-5 py-3 font-medium">Общая сумма</th>
-                <th className="text-right px-5 py-3 font-medium">Доступно</th>
-                <th className="text-left px-5 py-3 font-medium">Инвесторы</th>
+                <th className="text-left px-5 py-3 font-medium whitespace-nowrap">Название</th>
+                <th className="text-right px-5 py-3 font-medium whitespace-nowrap">Общая сумма</th>
+                <th className="text-right px-5 py-3 font-medium whitespace-nowrap">Доступно</th>
+                <th className="text-left px-5 py-3 font-medium whitespace-nowrap">Инвесторы</th>
               </tr>
             </thead>
             <tbody>
