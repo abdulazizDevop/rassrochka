@@ -386,18 +386,32 @@ export default function AnalyticsPage() {
   const cashPayments = payments.filter(p => !p.note?.toLowerCase().includes('карт'));
   const cashSum = cashPayments.reduce((s, e) => s + e.amount, 0);
 
-  // LTV: average contract revenue across filtered active contracts
-  const filteredActive = filteredContracts.filter(c => c.status === 'В процессе');
-  const ltv = filteredActive.length > 0
-    ? Math.round(filteredActive.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / filteredActive.length)
+  // LTV: average contract revenue across ALL filtered contracts that weren't written off.
+  // (Lifetime value — includes fully paid-off contracts; excludes only Списан.)
+  const filteredForLtv = filteredContracts.filter(c => c.status !== 'Списан');
+  const ltv = filteredForLtv.length > 0
+    ? Math.round(filteredForLtv.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / filteredForLtv.length)
     : 0;
   const avgMonths = filteredContracts.length > 0
     ? (filteredContracts.reduce((s, c) => s + (c.months || 0), 0) / filteredContracts.length).toFixed(1)
     : '0';
-  const expectedPayments = filteredActive.reduce((s, c) => s + c.monthlyPayment, 0);
-  const paidMonthly = filteredActive.filter(c => c.paymentStatus === 'Оплачено').reduce((s, c) => s + c.monthlyPayment, 0);
-  const collectability = expectedPayments > 0 ? ((paidMonthly / expectedPayments) * 100).toFixed(1) : '0';
+  // Collectability: paid-up share of active-or-completed contracts.
+  // Fully paid contracts (Погашен / Досрочно погашен) count as 100% collected — otherwise a
+  // contract that was just closed by the final payment would DROP out of the numerator
+  // and drag the ratio down instead of up.
+  const collectablePool = filteredContracts.filter(c =>
+    c.status === 'В процессе' || c.status === 'Погашен' || c.status === 'Досрочно погашен'
+  );
+  const expectedPayments = collectablePool.reduce((s, c) => s + c.monthlyPayment, 0);
+  const paidMonthly = collectablePool.filter(c =>
+    c.status === 'Погашен' || c.status === 'Досрочно погашен' || c.paymentStatus === 'Оплачено'
+  ).reduce((s, c) => s + c.monthlyPayment, 0);
+  const collectability = expectedPayments > 0
+    ? ((paidMonthly / expectedPayments) * 100).toFixed(1)
+    : (collectablePool.length > 0 ? '100' : '0');
   const collectNum = Number(collectability);
+  // Keep filteredActive for the "forecast" cards that care about future cash flow only
+  const filteredActive = filteredContracts.filter(c => c.status === 'В процессе');
 
   // Goods totals — respect date/source filter
   const totalGoodsValue = filteredContracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0);
