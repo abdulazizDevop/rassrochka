@@ -2,6 +2,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { AuditSection } from '@/lib/types';
+import { Trash2 } from 'lucide-react';
 
 const SECTIONS: AuditSection[] = ['Договоры', 'Клиенты', 'Платежи', 'Баланс', 'Инвестиции', 'Настройки', 'Сотрудники', 'Продукты'];
 
@@ -26,7 +27,13 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 export default function AuditPage() {
-  const { auditLog, currentUser } = useApp();
+  const { auditLog, currentUser, clearAuditLog } = useApp();
+
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
+  const [employeeFilter, setEmployeeFilter] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   if (currentUser?.role === 'viewer') {
     return (
@@ -37,11 +44,6 @@ export default function AuditPage() {
       </div>
     );
   }
-
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [sectionFilter, setSectionFilter] = useState('');
-  const [employeeFilter, setEmployeeFilter] = useState('');
 
   const employees = useMemo(() => {
     const set = new Set(auditLog.map(e => e.employee));
@@ -71,8 +73,20 @@ export default function AuditPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">История действий сотрудников</h1>
-      <p className="text-sm text-gray-400 mb-8">Просматривайте все действия сотрудников в системе</p>
+      <div className="flex items-start justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">История действий сотрудников</h1>
+          <p className="text-sm text-gray-400">Просматривайте все действия сотрудников в системе</p>
+        </div>
+        {auditLog.length > 0 && (
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition shrink-0"
+          >
+            <Trash2 size={14} /> Очистить
+          </button>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-100 p-6 mb-6">
@@ -177,6 +191,37 @@ export default function AuditPage() {
       {filtered.length > 0 && (
         <div className="mt-3 text-xs text-gray-400">
           Показано записей: {filtered.length}{auditLog.length !== filtered.length ? ` из ${auditLog.length}` : ''}
+        </div>
+      )}
+
+      {/* Clear confirmation modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowClearConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Очистить аудит?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              Все записи истории действий ({auditLog.length}) будут удалены навсегда. Это действие нельзя отменить.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => { clearAuditLog(); setShowClearConfirm(false); }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition"
+              >
+                Очистить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

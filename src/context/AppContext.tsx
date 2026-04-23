@@ -42,6 +42,7 @@ interface AppContextType {
     addInvestor: (investor: Investor, depositAmount?: number) => void;
   deleteInvestor: (id: string) => void;
   addAuditEntry: (entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'employee'>) => void;
+  clearAuditLog: () => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   addTariff: (tariff: Tariff) => void;
   updateTariff: (id: string, updates: Partial<Tariff>) => void;
@@ -166,6 +167,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       body: JSON.stringify(full),
     });
   }, [currentUser, apiCall]);
+
+  const clearAuditLog = useCallback(() => {
+    setAuditLog([]);
+    apiCall('/api/audit', { method: 'DELETE' });
+  }, [apiCall]);
 
   const login = useCallback((username: string, password: string) => {
     const found = users.find(u => u.login === username && u.password === password);
@@ -859,7 +865,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       transferBetweenAccounts, depositAccount, withdrawAccount,
       addAccount, deleteAccount,
       addInvestor, deleteInvestor,
-      addAuditEntry,
+      addAuditEntry, clearAuditLog,
       updateSettings, addTariff, updateTariff, deleteTariff,
       addProduct, deleteProduct,
       createBackup, deleteBackup,
