@@ -1,5 +1,6 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Contract } from '@/lib/types';
 import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, CreditCard, X, Pencil } from 'lucide-react';
@@ -479,7 +480,16 @@ export default function ContractsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [payContract, setPayContract] = useState<Contract | null>(null);
   const [editContract, setEditContract] = useState<Contract | null>(null);
+  const searchParams = useSearchParams();
   const colRef = useRef<HTMLDivElement>(null);
+
+  // Auto-open edit modal when navigated with ?edit=<id>
+  useEffect(() => {
+    const editId = searchParams?.get('edit');
+    if (!editId) return;
+    const found = contracts.find(c => c.id === editId);
+    if (found) setEditContract(found);
+  }, [searchParams, contracts]);
 
   useEffect(() => {
     function h(e: MouseEvent) { if (colRef.current && !colRef.current.contains(e.target as Node)) setShowColumns(false); }
@@ -702,7 +712,11 @@ export default function ContractsPage() {
                         {col.key === 'number' && <span className="text-gray-700">{c.number}</span>}
                         {col.key === 'createdAt' && <span className="text-gray-700">{c.createdAt}</span>}
                         {col.key === 'endDate' && <span className="text-gray-700">{c.endDate}</span>}
-                        {col.key === 'clientName' && <Link href="/dashboard/clients" className="text-[#5B5BD6] hover:underline">{c.clientName}</Link>}
+                        {col.key === 'clientName' && (
+                          c.clientId
+                            ? <Link href={`/dashboard/clients?openClient=${encodeURIComponent(c.clientId)}`} className="text-[#5B5BD6] hover:underline">{c.clientName || '—'}</Link>
+                            : <span className="text-gray-500">{c.clientName || '—'}</span>
+                        )}
                         {col.key === 'product' && <span className="text-gray-700">{c.product}</span>}
                         {col.key === 'phone' && <span className="text-gray-700">{c.phone}</span>}
                         {col.key === 'status' && renderStatus(c)}

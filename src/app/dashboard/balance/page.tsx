@@ -504,7 +504,11 @@ export default function BalancePage() {
                   <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-              <button onClick={() => { setLedgerFromDate(''); setLedgerToDate(''); setLedgerUser('Все пользователи'); setLedgerOpType('Все типы'); }} className="flex items-center gap-1.5 border border-gray-200 text-gray-500 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 transition">
+              <button
+                type="button"
+                onClick={() => { setLedgerFromDate(''); setLedgerToDate(''); setLedgerUser('Все пользователи'); setLedgerOpType('Все типы'); }}
+                className="flex items-center gap-1.5 border border-[#5B5BD6] text-[#5B5BD6] bg-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-[#EEF0FF] active:bg-[#dddeff] transition"
+              >
                 <RotateCcw size={13} /> Сбросить
               </button>
               <button className="flex items-center gap-1.5 border border-gray-200 text-gray-500 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 transition">

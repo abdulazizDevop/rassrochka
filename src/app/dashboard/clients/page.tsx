@@ -1,5 +1,6 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Client, Contract } from '@/lib/types';
 import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil, User, FileText } from 'lucide-react';
@@ -52,13 +53,14 @@ function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: R
 }
 
 // ── Client profile modal (payment history + debt) ───────────────────────────
-function ClientProfileModal({ client, contracts, ledger, onClose }: {
+function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract }: {
   client: Client;
   contracts: Contract[];
   ledger: { id: string; date: string; amount: number; operation: string; note: string }[];
   onClose: () => void;
+  onEditContract?: (c: Contract) => void;
 }) {
-  const fullName = `${client.lastName} ${client.firstName} ${client.middleName}`.trim();
+  const fullName = `${client.lastName || ''} ${client.firstName || ''} ${client.middleName || ''}`.trim() || client.phone || 'Без имени';
   const clientContracts = contracts.filter(c => c.clientId === client.id);
   const [passportPhotos, setPassportPhotos] = useState<{ id: string; url: string }[]>([]);
   const [photosLoading, setPhotosLoading] = useState(true);
@@ -124,14 +126,25 @@ function ClientProfileModal({ client, contracts, ledger, onClose }: {
               <div className="space-y-2">
                 {clientContracts.map(c => (
                   <div key={c.id} className="border border-gray-100 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1 gap-2">
                       <span className="text-sm font-medium text-gray-800">Договор #{c.number} — {c.product}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        c.status === 'Погашен' || c.status === 'Досрочно погашен' ? 'bg-green-100 text-green-700' :
-                        c.status === 'Просрочен' ? 'bg-red-100 text-red-700' :
-                        c.status === 'Списан' ? 'bg-gray-100 text-gray-500' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>{c.status}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          c.status === 'Погашен' || c.status === 'Досрочно погашен' ? 'bg-green-100 text-green-700' :
+                          c.status === 'Просрочен' ? 'bg-red-100 text-red-700' :
+                          c.status === 'Списан' ? 'bg-gray-100 text-gray-500' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>{c.status}</span>
+                        {onEditContract && (
+                          <button
+                            onClick={() => onEditContract(c)}
+                            title="Редактировать договор"
+                            className="text-gray-400 hover:text-[#5B5BD6] transition"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-500 mt-2">
                       <div>Сумма: <span className="font-medium text-gray-700">{c.cost.toLocaleString('ru-RU')} ₽</span></div>
@@ -465,7 +478,8 @@ function ClientRow({ client, contractsCount, isViewer, onManagePhotos, onEdit, o
 }) {
   const [hovered, setHovered] = useState(false);
   const nameRef = useRef<HTMLSpanElement>(null);
-  const fullName = `${client.lastName} ${client.firstName} ${client.middleName}`.trim() || `${client.firstName} ${client.middleName}`.trim();
+  const rawName = `${client.lastName || ''} ${client.firstName || ''} ${client.middleName || ''}`.trim();
+  const fullName = rawName || client.phone || 'Без имени';
 
   return (
     <>
@@ -519,12 +533,22 @@ function ClientRow({ client, contractsCount, isViewer, onManagePhotos, onEdit, o
 // ── Main page ───────────────────────────────────────────────────────────────
 export default function ClientsPage() {
   const { clients, contracts, ledger, updateClient, currentUser } = useApp();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const isViewer = currentUser?.role === 'viewer';
   const [search, setSearch] = useState('');
   const [passportClient, setPassportClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [profileClient, setProfileClient] = useState<Client | null>(null);
   const [clientPhotos, setClientPhotos] = useState<Record<string, string[]>>({});
+
+  // Auto-open profile modal when ?openClient=<id> is present in URL
+  useEffect(() => {
+    const openId = searchParams?.get('openClient');
+    if (!openId) return;
+    const found = clients.find(c => c.id === openId);
+    if (found) setProfileClient(found);
+  }, [searchParams, clients]);
 
   // Load all client photos from server in one request
   useEffect(() => {
@@ -646,6 +670,10 @@ export default function ClientsPage() {
           contracts={contracts}
           ledger={ledger}
           onClose={() => setProfileClient(null)}
+          onEditContract={isViewer ? undefined : (c) => {
+            setProfileClient(null);
+            router.push(`/dashboard/contracts?edit=${encodeURIComponent(c.id)}`);
+          }}
         />
       )}
     </div>
