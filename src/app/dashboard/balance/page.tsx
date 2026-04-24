@@ -22,7 +22,8 @@ function formatDateInput(raw: string): string {
 const OPERATION_TYPES = ['Все типы', 'Пополнение', 'Списание', 'Перевод между счетами', 'Платёж клиента', 'Новый договор'];
 
 export default function BalancePage() {
-  const { accounts, ledger, depositAccount, withdrawAccount, transferBetweenAccounts, addAccount, deleteAccount, currentUser } = useApp();
+  const { accounts, ledger, depositAccount, withdrawAccount, transferBetweenAccounts, addAccount, deleteAccount, currentUser, clearOperationalExpenses, deleteLedgerEntry } = useApp();
+  const [showClearOpConfirm, setShowClearOpConfirm] = useState(false);
   const isViewer = currentUser?.role === 'viewer';
 
   if (isViewer) {
@@ -295,12 +296,20 @@ export default function BalancePage() {
                     <p className="text-xs text-gray-400">{new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</p>
                   </div>
                 </div>
-                {!isViewer && (
-                  <button onClick={() => setShowExpenseModal(true)}
-                    className="flex items-center gap-1 text-sm text-indigo-600 border border-indigo-200 rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 transition">
-                    <Plus size={14} /> Добавить
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {!isViewer && ledger.some(e => e.isOperationalExpense) && (
+                    <button onClick={() => setShowClearOpConfirm(true)}
+                      className="flex items-center gap-1 text-sm text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 hover:bg-red-50 transition">
+                      <Trash2 size={14} /> Очистить
+                    </button>
+                  )}
+                  {!isViewer && (
+                    <button onClick={() => setShowExpenseModal(true)}
+                      className="flex items-center gap-1 text-sm text-indigo-600 border border-indigo-200 rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 transition">
+                      <Plus size={14} /> Добавить
+                    </button>
+                  )}
+                </div>
               </div>
 
               {(() => {
@@ -323,12 +332,25 @@ export default function BalancePage() {
                       <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
                         <p className="text-xs text-gray-400 uppercase tracking-wide">ДЕТАЛИЗАЦИЯ</p>
                         {thisMonthExpenses.map(e => (
-                          <div key={e.id} className="flex justify-between items-start text-sm border-b border-gray-50 pb-1.5">
-                            <div>
+                          <div key={e.id} className="flex justify-between items-start text-sm border-b border-gray-50 pb-1.5 gap-2">
+                            <div className="min-w-0 flex-1">
                               <p className="text-gray-700 text-xs">{e.note}</p>
                               <p className="text-gray-400 text-xs">{e.date} · {e.accountName}</p>
                             </div>
-                            <span className="text-red-500 font-medium text-xs whitespace-nowrap ml-2">{fmt(e.amount)}</span>
+                            <span className="text-red-500 font-medium text-xs whitespace-nowrap">{fmt(e.amount)}</span>
+                            {!isViewer && (
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Удалить расход «${e.note}» на ${fmt(e.amount)}? Сумма вернётся на счёт.`)) {
+                                    deleteLedgerEntry(e.id);
+                                  }
+                                }}
+                                title="Удалить расход"
+                                className="text-gray-300 hover:text-red-500 transition shrink-0"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -686,6 +708,37 @@ export default function BalancePage() {
               <button onClick={handleAddExpense}
                 className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 transition">
                 <Minus size={15} /> Списать расход
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear all operational expenses confirmation */}
+      {showClearOpConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowClearOpConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Очистить операционные расходы?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              Все записи операционных расходов будут удалены, а суммы вернутся на счета. Это действие нельзя отменить.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearOpConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => { clearOperationalExpenses(); setShowClearOpConfirm(false); }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition"
+              >
+                Очистить
               </button>
             </div>
           </div>

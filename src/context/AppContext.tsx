@@ -28,9 +28,9 @@ interface AppContextType {
     addUserViaApi: (login: string, password: string, name: string, role: UserRole) => Promise<{ ok: boolean; error?: string }>;
     deleteUserViaApi: (login: string) => Promise<{ ok: boolean; error?: string }>;
     refreshUsers: () => Promise<void>;
-  addContract: (contract: Contract) => void;
+  addContract: (contract: Contract) => Promise<boolean>;
   deleteContract: (id: string) => void;
-  addClient: (client: Client) => void;
+  addClient: (client: Client) => Promise<boolean>;
   updateClient: (id: string, updates: Partial<Client>) => void;
   deleteClient: (id: string) => void;
   updateContract: (id: string, updates: Partial<Contract>) => void;
@@ -39,10 +39,12 @@ interface AppContextType {
   withdrawAccount: (accountId: string, amount: number, note: string, isOperational: boolean) => boolean;
   addAccount: (account: Account) => void;
   deleteAccount: (id: string) => void;
-    addInvestor: (investor: Investor, depositAmount?: number) => void;
+    addInvestor: (investor: Investor, depositAmount?: number) => Promise<boolean>;
   deleteInvestor: (id: string) => void;
   addAuditEntry: (entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'employee'>) => void;
   clearAuditLog: () => void;
+  clearOperationalExpenses: () => void;
+  deleteLedgerEntry: (id: string) => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   addTariff: (tariff: Tariff) => void;
   updateTariff: (id: string, updates: Partial<Tariff>) => void;
@@ -171,6 +173,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const clearAuditLog = useCallback(() => {
     setAuditLog([]);
     apiCall('/api/audit', { method: 'DELETE' });
+  }, [apiCall]);
+
+  // Removes ALL ledger entries flagged as operational expenses and refunds the
+  // accounts they were withdrawn from (since each was a withdrawAccount call).
+  const clearOperationalExpenses = useCallback(() => {
+    setLedger(prev => {
+      const opEntries = prev.filter(e => e.isOperationalExpense);
+      if (opEntries.length === 0) return prev;
+      // Refund balances
+      const refundByAccount: Record<string, number> = {};
+      for (const e of opEntries) {
+        if (!e.accountId) continue;
+        refundByAccount[e.accountId] = (refundByAccount[e.accountId] || 0) + e.amount;
+      }
+      setAccounts(accs => accs.map(a => refundByAccount[a.id]
+        ? { ...a, balance: a.balance + refundByAccount[a.id] }
+        : a
+      ));
+      // Persist account refunds
+      for (const [accId, delta] of Object.entries(refundByAccount)) {
+        setAccounts(current => {
+          const acc = current.find(a => a.id === accId);
+          if (acc) {
+            apiCall('/api/accounts', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: accId, balance: acc.balance }),
+            });
+          }
+          return current;
+        });
+      }
+      return prev.filter(e => !e.isOperationalExpense);
+    });
+    apiCall('/api/ledger?operationalOnly=1', { method: 'DELETE' });
+  }, [apiCall]);
+
+  const deleteLedgerEntry = useCallback((id: string) => {
+    setLedger(prev => {
+      const entry = prev.find(e => e.id === id);
+      if (!entry) return prev;
+      // If this was a withdrawal/operational expense, refund the account
+      if (entry.isOperationalExpense && entry.accountId) {
+        setAccounts(accs => accs.map(a =>
+          a.id === entry.accountId ? { ...a, balance: a.balance + entry.amount } : a
+        ));
+        setAccounts(current => {
+          const acc = current.find(a => a.id === entry.accountId);
+          if (acc) {
+            apiCall('/api/accounts', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: entry.accountId, balance: acc.balance }),
+            });
+          }
+          return current;
+        });
+      }
+      return prev.filter(e => e.id !== id);
+    });
+    apiCall(`/api/ledger?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
   }, [apiCall]);
 
   const login = useCallback((username: string, password: string) => {
@@ -310,13 +373,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
   }, []);
 
-  const addContract = useCallback((contract: Contract) => {
-    setContracts(prev => [...prev, contract]);
-    apiCall('/api/contracts', {
+  const addContract = useCallback(async (contract: Contract): Promise<boolean> => {
+    const res = await apiCall('/api/contracts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contract),
     });
+    if (!res || !res.ok) {
+      console.error('addContract: API failed, not updating state');
+      return false;
+    }
+    setContracts(prev => [...prev, contract]);
 
     const auditEntry: AuditLogEntry = {
       id: String(Date.now()),
@@ -333,6 +400,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auditEntry),
     });
+    return true;
   }, [apiCall, currentUser]);
 
   const deleteContract = useCallback((id: string) => {
@@ -430,15 +498,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [apiCall, currentUser]);
 
-  const addClient = useCallback((client: Client) => {
-    setClients(prev => [...prev, client]);
+  const addClient = useCallback(async (client: Client): Promise<boolean> => {
     // Send client without passportPhotos (photos are saved separately via /api/photos)
     const { passportPhotos, ...clientForDb } = client as Client & { passportPhotos?: string[] };
-    apiCall('/api/clients', {
+    const res = await apiCall('/api/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(clientForDb),
     });
+    if (!res || !res.ok) {
+      console.error('addClient: API failed, not updating state');
+      return false;
+    }
+    setClients(prev => [...prev, client]);
 
     const auditEntry: AuditLogEntry = {
       id: String(Date.now()),
@@ -446,7 +518,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       employee: currentUser?.name ?? 'Админ',
       action: 'Создание',
       section: 'Клиенты',
-      entity: `${client.lastName} ${client.firstName}`,
+      entity: `${client.lastName} ${client.firstName}`.trim() || client.phone || 'Без имени',
       details: `Добавлен клиент · ${client.phone}`,
     };
     setAuditLog(prev => [auditEntry, ...prev]);
@@ -455,6 +527,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(auditEntry),
     });
+    return true;
   }, [apiCall, currentUser]);
 
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
@@ -690,13 +763,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     apiCall(`/api/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
   }, [apiCall]);
 
-    const addInvestor = useCallback((investor: Investor, depositAmount?: number) => {
-      setInvestors(prev => [...prev, investor]);
-      apiCall('/api/investors', {
+    const addInvestor = useCallback(async (investor: Investor, depositAmount?: number): Promise<boolean> => {
+      const res = await apiCall('/api/investors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(investor),
       });
+      if (!res || !res.ok) {
+        console.error('addInvestor: API failed, not updating state');
+        return false;
+      }
+      setInvestors(prev => [...prev, investor]);
 
       // Add invested amount to the linked account balance
       if (depositAmount && depositAmount > 0 && investor.accountId) {
@@ -747,6 +824,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(auditEntry),
       });
+      return true;
     }, [currentUser, apiCall]);
 
   const deleteInvestor = useCallback((id: string) => {
@@ -865,7 +943,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       transferBetweenAccounts, depositAccount, withdrawAccount,
       addAccount, deleteAccount,
       addInvestor, deleteInvestor,
-      addAuditEntry, clearAuditLog,
+      addAuditEntry, clearAuditLog, clearOperationalExpenses, deleteLedgerEntry,
       updateSettings, addTariff, updateTariff, deleteTariff,
       addProduct, deleteProduct,
       createBackup, deleteBackup,

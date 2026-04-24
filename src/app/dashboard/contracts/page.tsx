@@ -705,7 +705,16 @@ export default function ContractsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(c => (
+                {filtered.map(c => {
+                  // Resolve client info live from clients[] so legacy contracts with empty
+                  // snapshot strings still render the current name/phone.
+                  const linkedClient = c.clientId ? clients.find(cl => cl.id === c.clientId) : undefined;
+                  const displayName = (c.clientName && c.clientName.trim())
+                    || (linkedClient && `${linkedClient.lastName || ''} ${linkedClient.firstName || ''} ${linkedClient.middleName || ''}`.trim())
+                    || (linkedClient?.phone)
+                    || '—';
+                  const displayPhone = (c.phone && c.phone.trim()) || linkedClient?.phone || '—';
+                  return (
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
                     {visibleCols.map(col => (
                       <td key={col.key} className="px-4 py-3 whitespace-nowrap">
@@ -714,11 +723,11 @@ export default function ContractsPage() {
                         {col.key === 'endDate' && <span className="text-gray-700">{c.endDate}</span>}
                         {col.key === 'clientName' && (
                           c.clientId
-                            ? <Link href={`/dashboard/clients?openClient=${encodeURIComponent(c.clientId)}`} className="text-[#5B5BD6] hover:underline">{c.clientName || '—'}</Link>
-                            : <span className="text-gray-500">{c.clientName || '—'}</span>
+                            ? <Link href={`/dashboard/clients?openClient=${encodeURIComponent(c.clientId)}`} className="text-[#5B5BD6] hover:underline">{displayName}</Link>
+                            : <span className="text-gray-500">{displayName}</span>
                         )}
-                        {col.key === 'product' && <span className="text-gray-700">{c.product}</span>}
-                        {col.key === 'phone' && <span className="text-gray-700">{c.phone}</span>}
+                        {col.key === 'product' && <span className="text-gray-700">{c.product || '—'}</span>}
+                        {col.key === 'phone' && <span className="text-gray-700">{displayPhone}</span>}
                         {col.key === 'status' && renderStatus(c)}
                         {col.key === 'remainingDebt' && <span className="text-gray-700">{c.remainingDebt.toLocaleString('ru-RU')}</span>}
                         {col.key === 'monthlyPayment' && <span className="text-gray-700">{c.monthlyPayment.toLocaleString('ru-RU')}</span>}
@@ -762,7 +771,8 @@ export default function ContractsPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 && (
                   <tr><td colSpan={visibleCols.length + 1} className="px-4 py-8 text-center text-gray-400">Нет договоров</td></tr>
                 )}

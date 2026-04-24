@@ -216,7 +216,11 @@ export default function InvestmentsPage() {
     setNewPercent(''); setNewFixed(''); setNewPeriodMonths('');
   }
 
-  function handleAdd() {
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState('');
+  async function handleAdd() {
+    if (adding) return;
+    setAddError('');
     if (!newName.trim() || !newInvested) return;
     const amt = parseFloat(newInvested.replace(/\s/g, '').replace(',', '.')) || 0;
     if (amt <= 0) return;
@@ -234,7 +238,8 @@ export default function InvestmentsPage() {
     }
     const total = months ? perMonth * months : perMonth;
 
-    addInvestor({
+    setAdding(true);
+    const ok = await addInvestor({
       id: String(Date.now()),
       name: newName.trim(),
       phone: newPhone.trim() || undefined,
@@ -251,6 +256,11 @@ export default function InvestmentsPage() {
       periodMonths: months,
       periodLabel: months && months > 1 ? `за ${months} мес.` : 'в месяц',
     }, amt);
+    setAdding(false);
+    if (!ok) {
+      setAddError('Не удалось сохранить партнёра. Проверьте подключение и попробуйте ещё раз.');
+      return;
+    }
     resetForm();
     setShowAdd(false);
   }
@@ -575,16 +585,21 @@ export default function InvestmentsPage() {
                 )}
               </div>
 
+            {addError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-2">
+                {addError}
+              </div>
+            )}
             <div className="flex gap-3">
               <button
-                onClick={() => { resetForm(); setShowAdd(false); }}
+                onClick={() => { resetForm(); setAddError(''); setShowAdd(false); }}
                 className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm hover:bg-gray-50 transition"
               >
                 Отмена
               </button>
               <button
                   onClick={handleAdd}
-                  disabled={!newName.trim() || !newInvested || parseFloat(newInvested) <= 0}
+                  disabled={adding || !newName.trim() || !newInvested || parseFloat(newInvested) <= 0}
                   className="flex-1 bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                 Добавить

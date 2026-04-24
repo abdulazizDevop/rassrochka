@@ -175,8 +175,11 @@ export default function CreateContractPage() {
     });
   };
 
-  const handleCreateNewClient = () => {
-    if (!newClientFirst || !newClientPhone) return;
+  const handleCreateNewClient = async () => {
+    if (!newClientFirst || !newClientPhone) {
+      setAlertMsg('Укажите имя и телефон клиента');
+      return;
+    }
     const newClient: Client = {
       id: Date.now().toString(),
       firstName: newClientFirst,
@@ -186,14 +189,24 @@ export default function CreateContractPage() {
       contractsCount: 0,
       passportPhotos: newClientPhotos,
     };
-    addClient(newClient);
+    const ok = await addClient(newClient);
+    if (!ok) {
+      setAlertMsg('Не удалось сохранить клиента. Попробуйте ещё раз.');
+      return;
+    }
     setSelectedClient(newClient);
     setClientMode('search');
     setNewClientFirst(''); setNewClientLast(''); setNewClientMiddle(''); setNewClientPhone('');
     setNewClientPhotos([]);
   };
 
-  const handleSubmit = () => {
+  const [submitting, setSubmitting] = useState(false);
+  const handleSubmit = async () => {
+    if (submitting) return;
+    if (!selectedClient || !selectedClient.id) {
+      setAlertMsg('Выберите клиента или создайте нового перед оформлением договора');
+      return;
+    }
     if (!cost || !firstPayment || !months || !startDate) {
       setAlertMsg('Заполните обязательные поля: Стоимость, Первый взнос, Количество месяцев, Дата начала');
       return;
@@ -228,7 +241,13 @@ export default function CreateContractPage() {
       effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
       effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,
     };
-    addContract(newContract);
+    setSubmitting(true);
+    const ok = await addContract(newContract);
+    if (!ok) {
+      setSubmitting(false);
+      setAlertMsg('Не удалось сохранить договор. Проверьте подключение и попробуйте ещё раз.');
+      return;
+    }
     if (firstPaymentNum > 0) {
       depositAccount('cash', firstPaymentNum, `Первый взнос по договору ${newContract.clientName} (#${newContract.number}) · ${productName}`);
       addAuditEntry({

@@ -6,12 +6,23 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const { id, firstName, lastName, middleName, phone, address, contractsCount } = await req.json();
+    if (!id) {
+      return NextResponse.json({ ok: false, error: 'id is required' }, { status: 400 });
+    }
     const db = getDb();
 
     db.prepare(
       `INSERT INTO clients (id, first_name, last_name, middle_name, phone, address, contracts_count)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, firstName, lastName, middleName, phone, address || '', contractsCount);
+    ).run(
+      id,
+      firstName || '',
+      lastName || '',
+      middleName || '',
+      phone || '',
+      address || '',
+      contractsCount ?? 0,
+    );
 
     return NextResponse.json({ ok: true, id });
   } catch (error) {

@@ -6,10 +6,13 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const { id, name, type, balance, orgBalance, investorsBalance, investPoolBalance } = await req.json();
+    if (!id || !name || !type) {
+      return NextResponse.json({ error: 'id, name, type are required' }, { status: 400 });
+    }
     const db = getDb();
     db.prepare(
       `INSERT INTO accounts (id, name, type, balance, org_balance, investors_balance, invest_pool_balance) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, name, type, balance, orgBalance, investorsBalance, investPoolBalance);
+    ).run(id, name, type, balance ?? 0, orgBalance ?? 0, investorsBalance ?? 0, investPoolBalance ?? 0);
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
