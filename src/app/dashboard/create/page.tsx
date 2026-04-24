@@ -123,8 +123,13 @@ export default function CreateContractPage() {
     : monthsNum;
 
   const monthly = effectiveInstallments > 0 ? Math.ceil(effectiveAfterFirst / effectiveInstallments) : 0;
-  const total = firstPaymentNum + monthly * effectiveInstallments;
+  // Итого = actual amount the customer owes (matches manual total when set, no rounding overpay)
+  const total = firstPaymentNum + effectiveAfterFirst;
   const remainingDebt = effectiveAfterFirst;
+  // Last installment is adjusted so the sum of all payments equals effectiveAfterFirst exactly
+  const lastMonthly = effectiveInstallments > 0
+    ? effectiveAfterFirst - monthly * (effectiveInstallments - 1)
+    : 0;
 
   // Reset custom total when inputs change
   useEffect(() => {
@@ -155,14 +160,15 @@ export default function CreateContractPage() {
     for (let i = 0; i < effectiveInstallments; i++) {
       // First payment is 1 month after startDate
       const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i + 1, payDayNum);
+      const isLast = i === effectiveInstallments - 1;
       schedule.push({
         month: i + 1,
         date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        amount: monthly,
+        amount: isLast ? lastMonthly : monthly,
       });
     }
     return schedule;
-  }, [effectiveInstallments, monthly, payDayNum, startDate, useEffectiveTerm, effectiveUnit, effectiveValueNum]);
+  }, [effectiveInstallments, monthly, lastMonthly, payDayNum, startDate, useEffectiveTerm, effectiveUnit, effectiveValueNum]);
 
   const clientResults = useMemo(() => {
     if (!clientSearch) return [];
