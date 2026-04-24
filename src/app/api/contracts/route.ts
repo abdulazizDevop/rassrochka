@@ -34,6 +34,10 @@ export async function POST(req: NextRequest) {
       comment, approved, useEffectiveTerm, effectiveMonths, effectiveDays,
     } = body;
 
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
     const db = getDb();
     db.prepare(
       `INSERT INTO contracts (
@@ -43,11 +47,33 @@ export async function POST(req: NextRequest) {
         comment, approved, use_effective_term, effective_months, effective_days
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      id, number, createdAt, endDate, clientId, clientName, product, phone,
-      status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost ?? null,
-      markup, firstPayment, months, source, tariff, account, startDate, payDay,
-      comment ?? null, approved ? 1 : 0,
-      useEffectiveTerm ? 1 : 0, effectiveMonths ?? null, effectiveDays ?? null
+      id,
+      number ?? 0,
+      createdAt || '',
+      endDate || '',
+      clientId || '',
+      clientName || '',
+      product || '',
+      phone || '',
+      status || 'В процессе',
+      remainingDebt ?? 0,
+      monthlyPayment ?? 0,
+      paymentStatus || 'Новый договор',
+      cost ?? 0,
+      purchaseCost ?? null,
+      markup ?? 0,
+      firstPayment ?? 0,
+      months ?? 0,
+      source || '',
+      tariff || '',
+      account || '',
+      startDate || '',
+      payDay ?? 1,
+      comment ?? null,
+      approved ? 1 : 0,
+      useEffectiveTerm ? 1 : 0,
+      effectiveMonths ?? null,
+      effectiveDays ?? null,
     );
 
     return NextResponse.json({ ok: true, id });

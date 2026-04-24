@@ -296,7 +296,8 @@ function AnimNum({ value, fmt: fmtFn = fmt }: { value: number; fmt?: (n: number)
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const { contracts, ledger, investors, currentUser } = useApp();
+  const { contracts, ledger, investors, currentUser, clearAllBusinessData } = useApp();
+  const isAdmin = currentUser?.role === 'admin';
 
   const today = new Date();
   const [dateFrom, setDateFrom] = useState('');
@@ -304,6 +305,8 @@ export default function AnalyticsPage() {
   const [source, setSource] = useState('Все источники');
   const [sourceOpen, setSourceOpen] = useState(false);
   const [showOpsModal, setShowOpsModal] = useState<false | 'income' | 'expense'>(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   function applyQuick(q: QuickPeriod) {
     const now = new Date();
@@ -599,9 +602,22 @@ export default function AnalyticsPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl">
       <>
-      <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Аналитика</h1>
-        <p className="text-sm text-gray-500 mb-6">Понятные цифры по финансам</p>
+      <motion.div
+        initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+        className="flex items-start justify-between gap-4 mb-6"
+      >
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Аналитика</h1>
+          <p className="text-sm text-gray-500">Понятные цифры по финансам</p>
+        </div>
+        {isAdmin && (contracts.length > 0 || ledger.length > 0 || investors.length > 0) && (
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition shrink-0"
+          >
+            Сбросить данные
+          </button>
+        )}
       </motion.div>
 
       {/* Filters */}
@@ -1223,6 +1239,45 @@ export default function AnalyticsPage() {
           </motion.div>
         )}
         </AnimatePresence>
+
+        {/* Reset all business data confirmation */}
+        {showResetConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !resetting && setShowResetConfirm(false)}>
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Сбросить все данные?</h3>
+              </div>
+              <p className="text-sm text-gray-500 mb-3">
+                Будут удалены: <strong>{contracts.length}</strong> договоров, <strong>{investors.length}</strong> партнёров, <strong>{ledger.length}</strong> записей в бух. книге. Балансы всех счетов будут обнулены.
+              </p>
+              <p className="text-xs text-red-600 mb-6">Это действие нельзя отменить. Используется только для сброса тестовых данных.</p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={resetting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={async () => {
+                    setResetting(true);
+                    await clearAllBusinessData();
+                    setResetting(false);
+                    setShowResetConfirm(false);
+                  }}
+                  disabled={resetting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition disabled:opacity-50"
+                >
+                  {resetting ? 'Сброс...' : 'Сбросить'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     </div>
   );

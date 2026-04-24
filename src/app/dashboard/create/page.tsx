@@ -6,8 +6,6 @@ import { Client } from '@/lib/types';
 import { ChevronDown, Download, Plus, Trash2, Search, Calculator, Camera, X, ZoomIn, FileText, FileSpreadsheet, AlertCircle, UserPlus, Users } from 'lucide-react';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
 
-const ACCOUNTS = ['общий (Доступно: 3 945 563 ₽)'];
-
 function formatDate(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
   if (digits.length === 0) return '';
@@ -57,7 +55,16 @@ export default function CreateContractPage() {
       setSource(prev => paymentMethods.includes(prev) ? prev : paymentMethods[0]);
     }
   }, [paymentMethods]);
-  const [account, setAccount] = useState(ACCOUNTS[0]);
+  // Live account options based on real balances from context
+  const accountOptions = useMemo(
+    () => appAccounts.map(a => `${a.name} (Доступно: ${a.balance.toLocaleString('ru-RU')} ₽)`),
+    [appAccounts]
+  );
+  const [account, setAccount] = useState('');
+  useEffect(() => {
+    if (accountOptions.length === 0) { setAccount(''); return; }
+    setAccount(prev => accountOptions.includes(prev) ? prev : accountOptions[0]);
+  }, [accountOptions]);
   const [markup, setMarkup] = useState('');
   const [productName, setProductName] = useState('');
   const [startDate, setStartDate] = useState(() => {
@@ -472,7 +479,9 @@ export default function CreateContractPage() {
                 <div className="relative">
                   <select value={account} onChange={e => setAccount(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white">
-                    {ACCOUNTS.map(a => <option key={a}>{a}</option>)}
+                    {accountOptions.length === 0
+                      ? <option value="">Нет счетов</option>
+                      : accountOptions.map(a => <option key={a}>{a}</option>)}
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>

@@ -45,6 +45,7 @@ interface AppContextType {
   clearAuditLog: () => void;
   clearOperationalExpenses: () => void;
   deleteLedgerEntry: (id: string) => void;
+  clearAllBusinessData: () => Promise<void>;
   updateSettings: (updates: Partial<AppSettings>) => void;
   addTariff: (tariff: Tariff) => void;
   updateTariff: (id: string, updates: Partial<Tariff>) => void;
@@ -234,6 +235,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return prev.filter(e => e.id !== id);
     });
     apiCall(`/api/ledger?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall]);
+
+  // Wipe all business data — contracts, clients, ledger, investors, pools,
+  // and reset account balances to 0. Used by admins to clear test data.
+  const clearAllBusinessData = useCallback(async () => {
+    // Delete each contract on the backend; cascades its ledger entries
+    const existingContracts = await fetch('/api/data').then(r => r.ok ? r.json() : null).catch(() => null);
+    if (existingContracts) {
+      for (const c of existingContracts.contracts ?? []) {
+        await apiCall(`/api/contracts?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+      }
+      for (const cl of existingContracts.clients ?? []) {
+        await apiCall(`/api/clients?id=${encodeURIComponent(cl.id)}`, { method: 'DELETE' });
+      }
+      for (const inv of existingContracts.investors ?? []) {
+        await apiCall(`/api/investors?id=${encodeURIComponent(inv.id)}`, { method: 'DELETE' });
+      }
+      for (const acc of existingContracts.accounts ?? []) {
+        await apiCall('/api/accounts', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: acc.id, balance: 0, orgBalance: 0, investorsBalance: 0, investPoolBalance: 0 }),
+        });
+      }
+    }
+    // Clear client-side state
+    setContracts([]);
+    setClients([]);
+    setLedger([]);
+    setInvestors([]);
+    setInvestPools([]);
+    setTransfers([]);
+    setAccounts(prev => prev.map(a => ({ ...a, balance: 0, orgBalance: 0, investorsBalance: 0, investPoolBalance: 0 })));
   }, [apiCall]);
 
   const login = useCallback((username: string, password: string) => {
@@ -943,7 +977,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       transferBetweenAccounts, depositAccount, withdrawAccount,
       addAccount, deleteAccount,
       addInvestor, deleteInvestor,
-      addAuditEntry, clearAuditLog, clearOperationalExpenses, deleteLedgerEntry,
+      addAuditEntry, clearAuditLog, clearOperationalExpenses, deleteLedgerEntry, clearAllBusinessData,
       updateSettings, addTariff, updateTariff, deleteTariff,
       addProduct, deleteProduct,
       createBackup, deleteBackup,
