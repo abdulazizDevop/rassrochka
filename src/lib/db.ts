@@ -190,6 +190,37 @@ function initSchema(db: Database.Database) {
     db.exec('ALTER TABLE contracts ADD COLUMN effective_days INTEGER');
   }
 
+  // Migrate: add columns to investors if missing (older DBs)
+  const investorCols = db.prepare('PRAGMA table_info(investors)').all() as { name: string }[];
+  const invColNames = new Set(investorCols.map(c => c.name));
+  if (!invColNames.has('phone')) {
+    db.exec('ALTER TABLE investors ADD COLUMN phone TEXT');
+  }
+  if (!invColNames.has('account_id')) {
+    db.exec('ALTER TABLE investors ADD COLUMN account_id TEXT');
+  }
+  if (!invColNames.has('account_name')) {
+    db.exec('ALTER TABLE investors ADD COLUMN account_name TEXT');
+  }
+  if (!invColNames.has('account_type')) {
+    db.exec('ALTER TABLE investors ADD COLUMN account_type TEXT');
+  }
+  if (!invColNames.has('profit_percent')) {
+    db.exec('ALTER TABLE investors ADD COLUMN profit_percent REAL');
+  }
+  if (!invColNames.has('profit_type')) {
+    db.exec("ALTER TABLE investors ADD COLUMN profit_type TEXT DEFAULT 'percent'");
+  }
+  if (!invColNames.has('profit_fixed')) {
+    db.exec('ALTER TABLE investors ADD COLUMN profit_fixed REAL');
+  }
+  if (!invColNames.has('period_months')) {
+    db.exec('ALTER TABLE investors ADD COLUMN period_months INTEGER');
+  }
+  if (!invColNames.has('period_label')) {
+    db.exec('ALTER TABLE investors ADD COLUMN period_label TEXT');
+  }
+
   // Migrate plaintext passwords to bcrypt hashes
   const rows = db.prepare('SELECT login, password FROM users').all() as { login: string; password: string }[];
   for (const row of rows) {
