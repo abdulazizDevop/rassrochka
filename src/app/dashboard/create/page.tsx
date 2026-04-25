@@ -216,8 +216,32 @@ export default function CreateContractPage() {
   const [submitting, setSubmitting] = useState(false);
   const handleSubmit = async () => {
     if (submitting) return;
-    if (!selectedClient || !selectedClient.id) {
-      setAlertMsg('Выберите клиента или создайте нового перед оформлением договора');
+
+    // Auto-create new client if user filled the new-client form but never clicked "Создать"
+    let clientToUse = selectedClient;
+    if (!clientToUse && clientMode === 'new' && (newClientFirst || newClientLast) && newClientPhone) {
+      const auto: Client = {
+        id: Date.now().toString(),
+        firstName: newClientFirst,
+        lastName: newClientLast,
+        middleName: newClientMiddle,
+        phone: newClientPhone,
+        contractsCount: 0,
+        passportPhotos: newClientPhotos,
+      };
+      setSubmitting(true);
+      const ok = await addClient(auto);
+      setSubmitting(false);
+      if (!ok) {
+        setAlertMsg('Не удалось сохранить клиента. Попробуйте ещё раз.');
+        return;
+      }
+      clientToUse = auto;
+      setSelectedClient(auto);
+    }
+
+    if (!clientToUse || !clientToUse.id) {
+      setAlertMsg('Выберите клиента или заполните данные нового клиента перед оформлением договора');
       return;
     }
     if (!cost || !firstPayment || !months || !startDate) {
@@ -230,10 +254,10 @@ export default function CreateContractPage() {
       number: contracts.length + 1,
       createdAt: startDate,
       endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
-      clientId: selectedClient?.id ?? '',
-      clientName: selectedClient ? `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim() : '',
+      clientId: clientToUse.id,
+      clientName: `${clientToUse.lastName || ''} ${clientToUse.firstName || ''} ${clientToUse.middleName || ''}`.trim() || clientToUse.phone || 'Без имени',
       product: productName || '',
-      phone: selectedClient?.phone ?? '',
+      phone: clientToUse.phone || '',
       status: 'В процессе' as const,
       remainingDebt: finalDebt,
       monthlyPayment: monthly,
