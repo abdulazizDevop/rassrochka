@@ -5,6 +5,8 @@
 
 let scheduled = false;
 
+const RETENTION_DAYS = 30;
+
 export function startAutoBackupScheduler() {
   if (scheduled) return;
   scheduled = true;
@@ -35,17 +37,11 @@ function checkAndSchedule() {
 async function triggerAutoBackup() {
   try {
     const { getDb } = await import('./db');
+    const { collectBackupData } = await import('./backupData');
     const db = getDb();
 
-    // Collect all data from DB
-    const contracts = db.prepare('SELECT * FROM contracts').all();
-    const clients   = db.prepare('SELECT * FROM clients').all();
-    const accounts  = db.prepare('SELECT * FROM accounts').all();
-    const ledger    = db.prepare('SELECT * FROM ledger').all();
-    const investors = db.prepare('SELECT * FROM investors').all();
-
     const pathMod = await import('path');
-    const fs      = await import('fs');
+    const fs = await import('fs');
 
     const BACKUPS_DIR = pathMod.join(process.cwd(), 'backups');
     fs.mkdirSync(BACKUPS_DIR, { recursive: true });
@@ -54,24 +50,24 @@ async function triggerAutoBackup() {
     const now = new Date();
     const ts = `${pad(now.getDate())}.${pad(now.getMonth()+1)}.${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
+    const snapshot = collectBackupData(db, ts);
     const id = String(Date.now());
     const filename = `auto_backup_${ts.replace(/[:.]/g, '-').replace(/ /g, '_')}.json`;
     const filepath = pathMod.join(BACKUPS_DIR, filename);
 
     fs.writeFileSync(
       filepath,
-      JSON.stringify({ contracts, clients, accounts, ledger, investors, exportedAt: ts, autoBackup: true }, null, 2),
-      'utf-8'
+      JSON.stringify({ ...snapshot, autoBackup: true }, null, 2),
+      'utf-8',
     );
 
     db.prepare('INSERT INTO backups (id, filename, created_at, note) VALUES (?, ?, ?, ?)').run(id, filename, ts, 'Авто-бэкап 23:50');
 
     console.log(`[AutoBackup] Saved: ${filename}`);
 
-    // ── Удаляем авто-бэкапы старше 2 дней ──────────────────────────────
-    // Оставляем только сегодня (0) и вчера (1). Позавчера и старше — удаляем.
+    // Retention: keep auto-backups for RETENTION_DAYS days
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 2); // 2 дня назад — всё что старше удаляем
+    cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
     cutoff.setHours(0, 0, 0, 0);
 
     const oldRows = db.prepare(
@@ -79,7 +75,6 @@ async function triggerAutoBackup() {
     ).all() as { id: string; filename: string }[];
 
     for (const row of oldRows) {
-      // parse date from filename: auto_backup_DD-MM-YYYY_HH-MM-SS.json
       const match = row.filename.match(/auto_backup_(\d{2})-(\d{2})-(\d{4})/);
       if (!match) continue;
       const [, dd, mm, yyyy] = match;

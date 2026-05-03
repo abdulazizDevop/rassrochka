@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Archive, Plus, Trash2, Download, FileSpreadsheet, Clock, CheckCircle2 } from 'lucide-react';
+import { Archive, Plus, Trash2, Download, FileSpreadsheet, Clock, CheckCircle2, RotateCcw, Upload } from 'lucide-react';
 
 interface BackupRow {
   id: string;
@@ -12,11 +12,16 @@ interface BackupRow {
 }
 
 export default function BackupsPage() {
-  const { contracts, clients, accounts, ledger, investors, currentUser } = useApp();
+  const { currentUser } = useApp();
   const isViewer = currentUser?.role === 'viewer';
   const [backups, setBackups] = useState<BackupRow[]>([]);
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const uploadRef = useRef<HTMLInputElement>(null);
   const [lastAuto, setLastAuto] = useState<string | null>(null);
   const [nextBackupIn, setNextBackupIn] = useState('');
 
@@ -75,18 +80,63 @@ export default function BackupsPage() {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      const payload = { contracts, clients, accounts, ledger, investors };
-      const res = await fetch('/api/backups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch('/api/backups', { method: 'POST' });
       if (res.ok) {
         const row = await res.json() as BackupRow;
         setBackups(prev => [row, ...prev]);
       }
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    setRestoring(true);
+    setRestoreError(null);
+    setRestoreMsg(null);
+    try {
+      const res = await fetch(`/api/backups/restore?id=${id}`, { method: 'POST' });
+      const data = await res.json() as { ok?: boolean; restored?: Record<string, number>; error?: string };
+      if (!res.ok || !data.ok) {
+        setRestoreError(data.error ?? 'Не удалось восстановить');
+        return;
+      }
+      setRestoreMsg('База восстановлена. Страница будет перезагружена.');
+      setRestoreId(null);
+      await loadBackups();
+      setTimeout(() => window.location.reload(), 1500);
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleUploadRestore = async (file: File) => {
+    setRestoring(true);
+    setRestoreError(null);
+    setRestoreMsg(null);
+    try {
+      const text = await file.text();
+      let json: unknown;
+      try { json = JSON.parse(text); } catch {
+        setRestoreError('Файл не является валидным JSON');
+        return;
+      }
+      const res = await fetch('/api/backups/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(json),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setRestoreError(data.error ?? 'Не удалось восстановить');
+        return;
+      }
+      setRestoreMsg('База восстановлена из загруженного файла. Страница будет перезагружена.');
+      await loadBackups();
+      setTimeout(() => window.location.reload(), 1500);
+    } finally {
+      setRestoring(false);
+      if (uploadRef.current) uploadRef.current.value = '';
     }
   };
 
@@ -140,15 +190,42 @@ export default function BackupsPage() {
             <Archive size={17} className="text-gray-500" />
             <span className="font-semibold text-gray-800">Список резервных копий</span>
           </div>
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="flex items-center gap-1.5 border border-[#5B5BD6] text-[#5B5BD6] text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#EEF0FF] transition-colors disabled:opacity-50"
-          >
-            <Plus size={15} />
-            {creating ? 'Создание...' : 'Создать резервную копию'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              ref={uploadRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) handleUploadRestore(f);
+              }}
+            />
+            <button
+              onClick={() => uploadRef.current?.click()}
+              disabled={restoring}
+              className="flex items-center gap-1.5 border border-amber-500 text-amber-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50"
+            >
+              <Upload size={15} />
+              Загрузить и восстановить
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className="flex items-center gap-1.5 border border-[#5B5BD6] text-[#5B5BD6] text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#EEF0FF] transition-colors disabled:opacity-50"
+            >
+              <Plus size={15} />
+              {creating ? 'Создание...' : 'Создать резервную копию'}
+            </button>
+          </div>
         </div>
+
+        {restoreMsg && (
+          <div className="mx-5 mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">{restoreMsg}</div>
+        )}
+        {restoreError && (
+          <div className="mx-5 mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">Ошибка: {restoreError}</div>
+        )}
 
         {/* List */}
         {backups.length === 0 ? (
@@ -183,6 +260,15 @@ export default function BackupsPage() {
                       <FileSpreadsheet size={13} />
                       Excel
                     </button>
+                    <button
+                      onClick={() => setRestoreId(b.id)}
+                      disabled={restoring}
+                      title="Восстановить из этой копии"
+                      className="flex items-center gap-1.5 text-xs text-amber-600 border border-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    >
+                      <RotateCcw size={13} />
+                      Восстановить
+                    </button>
                   <button
                     onClick={() => setDeleteId(b.id)}
                     title="Удалить"
@@ -215,6 +301,35 @@ export default function BackupsPage() {
               <button onClick={() => handleDelete(deleteId)}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition">
                 Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {restoreId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !restoring && setRestoreId(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <RotateCcw size={20} className="text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Восстановить базу?</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">Все текущие данные будут заменены содержимым выбранной копии.</p>
+            <p className="text-xs text-gray-500 mb-6">Перед восстановлением будет автоматически создана копия текущей базы (с пометкой «Перед восстановлением»), чтобы вы могли откатиться обратно.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setRestoreId(null)}
+                disabled={restoring}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition disabled:opacity-50">
+                Отмена
+              </button>
+              <button
+                onClick={() => handleRestore(restoreId)}
+                disabled={restoring}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition disabled:opacity-50">
+                {restoring ? 'Восстановление...' : 'Восстановить'}
               </button>
             </div>
           </div>

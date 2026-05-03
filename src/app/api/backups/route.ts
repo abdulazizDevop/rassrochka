@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { collectBackupData } from '@/lib/backupData';
 import path from 'path';
 import fs from 'fs';
 
@@ -25,10 +26,9 @@ export async function GET() {
   }
 }
 
-// POST /api/backups — create backup from submitted data
-export async function POST(req: NextRequest) {
+// POST /api/backups — create backup directly from DB (ignores body)
+export async function POST(_req: NextRequest) {
   try {
-    const body = await req.json();
     fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
     const id = String(Date.now());
@@ -36,9 +36,10 @@ export async function POST(req: NextRequest) {
     const filename = `backup_${ts.replace(/[:.]/g, '-').replace(/ /g, '_')}.json`;
     const filepath = path.join(BACKUPS_DIR, filename);
 
-    fs.writeFileSync(filepath, JSON.stringify({ ...body, exportedAt: ts }, null, 2), 'utf-8');
-
     const db = getDb();
+    const snapshot = collectBackupData(db, ts);
+    fs.writeFileSync(filepath, JSON.stringify(snapshot, null, 2), 'utf-8');
+
     db.prepare('INSERT INTO backups (id, filename, created_at, note) VALUES (?, ?, ?, ?)').run(id, filename, ts, 'Ручное создание');
 
     return NextResponse.json({ id, createdAt: ts, filename, note: 'Ручное создание', size: getSizeLabel(filename) });

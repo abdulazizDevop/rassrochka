@@ -217,31 +217,38 @@ export default function CreateContractPage() {
   const handleSubmit = async () => {
     if (submitting) return;
 
-    // Auto-create new client if user filled the new-client form but never clicked "Создать"
-    let clientToUse = selectedClient;
-    if (!clientToUse && clientMode === 'new' && (newClientFirst || newClientLast) && newClientPhone) {
-      const auto: Client = {
-        id: Date.now().toString(),
-        firstName: newClientFirst,
-        lastName: newClientLast,
-        middleName: newClientMiddle,
-        phone: newClientPhone,
-        contractsCount: 0,
-        passportPhotos: newClientPhotos,
-      };
-      setSubmitting(true);
-      const ok = await addClient(auto);
-      setSubmitting(false);
-      if (!ok) {
-        setAlertMsg('Не удалось сохранить клиента. Попробуйте ещё раз.');
+    const clientToUse = selectedClient;
+
+    // No client selected — switch to "new" mode and prefill from search query (if any)
+    if (!clientToUse || !clientToUse.id) {
+      if (clientMode === 'search') {
+        const query = clientSearch.trim();
+        const digits = query.replace(/\D/g, '');
+        const looksLikePhone = digits.length >= 4 || /^[+\d]/.test(query);
+        if (query) {
+          if (looksLikePhone) {
+            if (!newClientPhone) setNewClientPhone(formatRuPhone(query));
+          } else {
+            const parts = query.split(/\s+/).filter(Boolean);
+            if (!newClientLast && parts[0]) setNewClientLast(parts[0]);
+            if (!newClientFirst && parts[1]) setNewClientFirst(parts[1]);
+            if (!newClientMiddle && parts.length > 2) setNewClientMiddle(parts.slice(2).join(' '));
+          }
+        }
+        setClientMode('new');
+        setAlertMsg('Клиент не выбран. Заполните данные нового клиента и нажмите «Создать клиента», затем повторно — «Создать договор».');
         return;
       }
-      clientToUse = auto;
-      setSelectedClient(auto);
-    }
-
-    if (!clientToUse || !clientToUse.id) {
-      setAlertMsg('Выберите клиента или заполните данные нового клиента перед оформлением договора');
+      // clientMode === 'new'
+      if (!newClientFirst.trim()) {
+        setAlertMsg('Укажите имя клиента');
+        return;
+      }
+      if (!newClientPhone.trim()) {
+        setAlertMsg('Укажите телефон клиента');
+        return;
+      }
+      setAlertMsg('Нажмите «Создать клиента» перед оформлением договора');
       return;
     }
     if (!cost || !firstPayment || !months || !startDate) {
@@ -404,7 +411,7 @@ export default function CreateContractPage() {
 
                 {/* Passport photos */}
                 <div>
-                  <label className="block text-sm text-gray-600 mb-2 flex items-center gap-1.5">
+                  <label className="text-sm text-gray-600 mb-2 flex items-center gap-1.5">
                     <Camera size={14} className="text-[#5B5BD6]" /> Фото паспорта
                     <span className="text-gray-400 font-normal text-xs">(необязательно)</span>
                   </label>
