@@ -80,20 +80,39 @@ function getDaysUntilPayment(c: Contract): number {
   return Math.floor((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/** Is the contract's payment overdue (first payment passed, or endDate already passed) */
+/** The payment due date of the current period (this month's payDay if already passed, else last month's payDay). */
+function getCurrentPeriodDueDate(c: Contract): Date {
+  const now = new Date();
+  const payDay = c.payDay || 1;
+  if (now.getDate() > payDay) {
+    return new Date(now.getFullYear(), now.getMonth(), payDay);
+  }
+  // payDay hasn't arrived yet this month — current open period is last month's payDay
+  return new Date(now.getFullYear(), now.getMonth() - 1, payDay);
+}
+
+/** True if the most recent payment covers the current open period. */
+function isCurrentPeriodPaid(c: Contract): boolean {
+  const lastPay = parseRuDate(c.lastPaymentDate ?? '');
+  if (!lastPay) return false;
+  const dueDate = getCurrentPeriodDueDate(c);
+  return lastPay >= dueDate;
+}
+
+/** Is the contract's payment overdue. */
 function isPaymentOverdue(c: Contract): boolean {
   if (c.remainingDebt <= 0) return false;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  // First payment hasn't arrived yet — never overdue
   const firstPay = getFirstPaymentDate(c);
   if (firstPay && today < firstPay) return false;
-  // If contract endDate has passed — definitely overdue
   const end = parseRuDate(c.endDate);
   if (end && end < today) return true;
-  // If payDay already passed this month
   const payDay = c.payDay || 1;
-  return now.getDate() > payDay;
+  // payDay hasn't passed yet this month — not overdue
+  if (now.getDate() <= payDay) return false;
+  // payDay has passed — overdue unless current period has already been paid
+  return !isCurrentPeriodPaid(c);
 }
 
 /** How many days the payment is overdue. 0 if not overdue. */
@@ -101,20 +120,33 @@ function getPaymentOverdueDays(c: Contract): number {
   if (c.remainingDebt <= 0) return 0;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  // First payment hasn't arrived yet — not overdue
   const firstPay = getFirstPaymentDate(c);
   if (firstPay && today < firstPay) return 0;
-  // If endDate already passed — count from endDate (handles 3-4 months overdue)
   const end = parseRuDate(c.endDate);
   if (end && end < today) {
     return Math.floor((today.getTime() - end.getTime()) / (1000 * 60 * 60 * 24));
   }
-  // Otherwise count from this month's payDay (if it has passed)
   const payDay = c.payDay || 1;
-  if (now.getDate() > payDay) {
-    const dueDate = new Date(now.getFullYear(), now.getMonth(), payDay);
-    return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+  if (now.getDate() <= payDay) return 0;
+  if (isCurrentPeriodPaid(c)) return 0;
+  const dueDate = new Date(now.getFullYear(), now.getMonth(), payDay);
+  return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** Returns 1, 2, or 3 if the next payment is due within that many days (yellow warning). 0 otherwise. */
+function getPaymentWarningDays(c: Contract): number {
+  if (c.remainingDebt <= 0) return 0;
+  if (isPaymentOverdue(c)) return 0;
+  // If the upcoming payDay is this month and already covered, no warning
+  const now = new Date();
+  const payDay = c.payDay || 1;
+  if (now.getDate() <= payDay) {
+    const upcomingDue = new Date(now.getFullYear(), now.getMonth(), payDay);
+    const lastPay = parseRuDate(c.lastPaymentDate ?? '');
+    if (lastPay && lastPay >= upcomingDue) return 0;
   }
+  const days = getDaysUntilPayment(c);
+  if (days >= 1 && days <= 3) return days;
   return 0;
 }
 
@@ -465,7 +497,7 @@ export default function ContractsPage() {
   const isViewer = currentUser?.role === 'viewer';
 
   // Tab state
-  const [tab, setTab] = useState<'all' | 'upcoming'>('all');
+  const [tab, setTab] = useState<'all' | 'upcoming' | 'soon'>('all');
 
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -499,6 +531,15 @@ export default function ContractsPage() {
 
   const toggleColumn = (key: string) => setColumns(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
   const handleSort = (key: string) => { if (sortKey === key) setSortAsc(a => !a); else { setSortKey(key); setSortAsc(true); } };
+
+  // Soon: contracts where payment is due in 1-3 days (yellow warning, not yet overdue)
+  const soonContracts = useMemo(() => {
+    return contracts.filter(c => {
+      if (c.remainingDebt <= 0) return false;
+      if (c.status === 'Погашен' || c.status === 'Досрочно погашен' || c.status === 'Списан') return false;
+      return getPaymentWarningDays(c) > 0;
+    }).sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+  }, [contracts]);
 
   // Upcoming payments: active contracts with debt where payDay is within 3 days, overdue, or payDay already passed this month
   const upcomingContracts = useMemo(() => {
@@ -561,9 +602,13 @@ export default function ContractsPage() {
     const newDebt = Math.max(0, c.remainingDebt - amount);
     const isPaid = newDebt === 0;
     const isEarly = isPaid && amount >= c.remainingDebt && c.months > 1;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const today = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`;
     updateContract(c.id, {
       paymentStatus: 'Оплачено',
       remainingDebt: newDebt,
+      lastPaymentDate: today,
       ...(isPaid ? { status: isEarly ? 'Досрочно погашен' : 'Погашен' } : {}),
     });
     depositAccount('cash', amount, `Платёж клиента ${c.clientName} (#${c.number}) · ${c.product}`);
@@ -581,13 +626,24 @@ export default function ContractsPage() {
       const days = getPaymentOverdueDays(c) || getOverdueDays(c.endDate);
       return <span className="text-red-500 font-medium">{days > 0 ? `Просрочен ${days} дн.` : 'Просрочен'}</span>;
     }
-    // Show overdue days even for "В процессе" if payment is missed
     const overdueDays = getPaymentOverdueDays(c);
     if (overdueDays > 0) {
       return (
         <span className="flex flex-col">
           <span className={`font-medium ${STATUS_COLORS[c.status] || 'text-gray-700'}`}>{c.status}</span>
           <span className="text-xs text-red-500 font-medium">⚠ Просрочено {overdueDays} дн.</span>
+        </span>
+      );
+    }
+    const warnDays = getPaymentWarningDays(c);
+    if (warnDays > 0) {
+      return (
+        <span className="flex flex-col">
+          <span className={`font-medium ${STATUS_COLORS[c.status] || 'text-gray-700'}`}>{c.status}</span>
+          <span className="text-xs text-amber-500 font-medium flex items-center gap-1">
+            <span className="text-amber-500">🟡</span>
+            Осталось {warnDays} {warnDays === 1 ? 'день' : 'дн.'}
+          </span>
         </span>
       );
     }
@@ -624,6 +680,19 @@ export default function ContractsPage() {
             )}
           </button>
         )}
+        {!isViewer && (
+          <button onClick={() => setTab('soon')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition ${
+              tab === 'soon' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            <span className="text-amber-500">🟡</span> Осталось 3 дня
+            {soonContracts.length > 0 && (
+              <span className="bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {soonContracts.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* ─── Tab: Upcoming Payments ─── */}
@@ -637,6 +706,24 @@ export default function ContractsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {upcomingContracts.map(c => (
+                <UpcomingCard key={c.id} contract={c} onPay={setPayContract} isViewer={isViewer} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tab: Soon (1-3 days remaining) ─── */}
+      {tab === 'soon' && !isViewer && (
+        <div>
+          {soonContracts.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 py-16 text-center">
+              <span className="text-4xl block mb-3">🟡</span>
+              <p className="text-gray-400 text-sm">Нет договоров с оплатой в ближайшие 3 дня</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {soonContracts.map(c => (
                 <UpcomingCard key={c.id} contract={c} onPay={setPayContract} isViewer={isViewer} />
               ))}
             </div>

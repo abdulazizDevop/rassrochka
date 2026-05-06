@@ -78,7 +78,8 @@ function initSchema(db: Database.Database) {
       approved            INTEGER NOT NULL DEFAULT 0,
       use_effective_term  INTEGER NOT NULL DEFAULT 0,
       effective_months    INTEGER,
-      effective_days      INTEGER
+      effective_days      INTEGER,
+      last_payment_date   TEXT
     );
 
     CREATE TABLE IF NOT EXISTS accounts (
@@ -188,6 +189,9 @@ function initSchema(db: Database.Database) {
   }
   if (!colNames.has('effective_days')) {
     db.exec('ALTER TABLE contracts ADD COLUMN effective_days INTEGER');
+  }
+  if (!colNames.has('last_payment_date')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN last_payment_date TEXT');
   }
 
   // Migrate: add columns to investors if missing (older DBs)

@@ -43,6 +43,8 @@ export interface Contract {
   effectiveMonths?: number;
   /** Alternative: remaining days (for sub-monthly terms) */
   effectiveDays?: number;
+  /** Date of the most recent payment (DD.MM.YYYY). Used to determine whether the current period is paid. */
+  lastPaymentDate?: string;
 }
 
 export interface Partner {

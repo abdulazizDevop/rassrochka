@@ -18,6 +18,7 @@ const camelToSnakeMap: Record<string, string> = {
   useEffectiveTerm: 'use_effective_term',
   effectiveMonths: 'effective_months',
   effectiveDays: 'effective_days',
+  lastPaymentDate: 'last_payment_date',
 };
 
 function toSnake(key: string): string {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       id, number, createdAt, endDate, clientId, clientName, product, phone,
       status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost,
       markup, firstPayment, months, source, tariff, account, startDate, payDay,
-      comment, approved, useEffectiveTerm, effectiveMonths, effectiveDays,
+      comment, approved, useEffectiveTerm, effectiveMonths, effectiveDays, lastPaymentDate,
     } = body;
 
     if (!id) {
@@ -44,8 +45,8 @@ export async function POST(req: NextRequest) {
         id, number, created_at, end_date, client_id, client_name, product, phone,
         status, remaining_debt, monthly_payment, payment_status, cost, purchase_cost,
         markup, first_payment, months, source, tariff, account, start_date, pay_day,
-        comment, approved, use_effective_term, effective_months, effective_days
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        comment, approved, use_effective_term, effective_months, effective_days, last_payment_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       number ?? 0,
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
       useEffectiveTerm ? 1 : 0,
       effectiveMonths ?? null,
       effectiveDays ?? null,
+      lastPaymentDate ?? null,
     );
 
     return NextResponse.json({ ok: true, id });

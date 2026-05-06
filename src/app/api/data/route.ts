@@ -49,6 +49,7 @@ export async function GET() {
       useEffectiveTerm: r.use_effective_term === 1,
       effectiveMonths: r.effective_months,
       effectiveDays: r.effective_days,
+      lastPaymentDate: r.last_payment_date,
     }));
 
     // --- Accounts ---

@@ -75,10 +75,9 @@ export default function CreateContractPage() {
   const [comment, setComment] = useState('');
   // Custom total override for discount
   const [customTotal, setCustomTotal] = useState('');
-  // "Время учитывать" — for existing partial debts
-  const [useEffectiveTerm, setUseEffectiveTerm] = useState(false);
-  const [effectiveUnit, setEffectiveUnit] = useState<'months' | 'days'>('months');
-  const [effectiveValue, setEffectiveValue] = useState('');
+  // "Фактический отсчёт" — overrides общий срок when at least one field > 0
+  const [actualMonths, setActualMonths] = useState('');
+  const [actualDays, setActualDays] = useState('');
 
   // Client mode: 'search' (existing) or 'new'
   const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
@@ -115,18 +114,17 @@ export default function CreateContractPage() {
   const hasDiscount = hasCustomTotal && customTotalNum < systemTotal;
   const discountAmount = hasDiscount ? systemTotal - customTotalNum : 0;
 
-  // Effective term values — for "Время учитывать" feature
-  const effectiveValueNum = parseInt(effectiveValue) || 0;
-  // Number of effective payment installments (in months) for monthly calc
-  const effectiveInstallments = useEffectiveTerm
-    ? (effectiveUnit === 'months' ? effectiveValueNum : Math.max(1, Math.ceil(effectiveValueNum / 30)))
-    : monthsNum;
+  // Фактический отсчёт — if any of the two fields is > 0, single payment scheduled at startDate + (months*30 + days)
+  const actualMonthsNum = parseInt(actualMonths) || 0;
+  const actualDaysNum = parseInt(actualDays) || 0;
+  const hasActualTerm = actualMonthsNum > 0 || actualDaysNum > 0;
+  const actualTotalDays = actualMonthsNum * 30 + actualDaysNum;
+
+  const effectiveInstallments = hasActualTerm ? 1 : monthsNum;
 
   const monthly = effectiveInstallments > 0 ? Math.ceil(effectiveAfterFirst / effectiveInstallments) : 0;
-  // Итого = actual amount the customer owes (matches manual total when set, no rounding overpay)
   const total = firstPaymentNum + effectiveAfterFirst;
   const remainingDebt = effectiveAfterFirst;
-  // Last installment is adjusted so the sum of all payments equals effectiveAfterFirst exactly
   const lastMonthly = effectiveInstallments > 0
     ? effectiveAfterFirst - monthly * (effectiveInstallments - 1)
     : 0;
@@ -145,20 +143,19 @@ export default function CreateContractPage() {
 
   const paymentSchedule = useMemo(() => {
     const baseDate = parseStartDate(startDate);
-    // Days-based schedule (only when useEffectiveTerm + days)
-    if (useEffectiveTerm && effectiveUnit === 'days' && effectiveValueNum > 0) {
+    // Фактический отсчёт — single payment scheduled at startDate + (months*30 + days)
+    if (hasActualTerm) {
       const d = new Date(baseDate);
-      d.setDate(d.getDate() + effectiveValueNum);
+      d.setDate(d.getDate() + actualTotalDays);
       return [{
         month: 1,
         date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        amount: monthly,
+        amount: effectiveAfterFirst,
       }];
     }
     if (effectiveInstallments <= 0) return [];
     const schedule = [];
     for (let i = 0; i < effectiveInstallments; i++) {
-      // First payment is 1 month after startDate
       const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i + 1, payDayNum);
       const isLast = i === effectiveInstallments - 1;
       schedule.push({
@@ -168,7 +165,7 @@ export default function CreateContractPage() {
       });
     }
     return schedule;
-  }, [effectiveInstallments, monthly, lastMonthly, payDayNum, startDate, useEffectiveTerm, effectiveUnit, effectiveValueNum]);
+  }, [effectiveInstallments, monthly, lastMonthly, payDayNum, startDate, hasActualTerm, actualTotalDays, effectiveAfterFirst]);
 
   const clientResults = useMemo(() => {
     if (!clientSearch) return [];
@@ -281,9 +278,9 @@ export default function CreateContractPage() {
       payDay: payDayNum,
       comment,
       approved: true,
-      useEffectiveTerm,
-      effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
-      effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,
+      useEffectiveTerm: hasActualTerm,
+      effectiveMonths: hasActualTerm ? actualMonthsNum : undefined,
+      effectiveDays: hasActualTerm ? actualDaysNum : undefined,
     };
     setSubmitting(true);
     const ok = await addContract(newContract);
@@ -312,9 +309,9 @@ export default function CreateContractPage() {
     remainingDebt: effectiveAfterFirst, monthlyPayment: monthly, paymentStatus: 'Новый договор' as const,
     cost: costNum, purchaseCost: parseFloat(purchaseCost) || 0, markup: markupAmount, firstPayment: firstPaymentNum,
     months: monthsNum, source, tariff: '', account: 'общий', startDate, payDay: payDayNum, comment, approved: true,
-    useEffectiveTerm,
-    effectiveMonths: useEffectiveTerm && effectiveUnit === 'months' ? effectiveValueNum : undefined,
-    effectiveDays: useEffectiveTerm && effectiveUnit === 'days' ? effectiveValueNum : undefined,
+    useEffectiveTerm: hasActualTerm,
+    effectiveMonths: hasActualTerm ? actualMonthsNum : undefined,
+    effectiveDays: hasActualTerm ? actualDaysNum : undefined,
   });
 
   return (
@@ -399,9 +396,9 @@ export default function CreateContractPage() {
               /* New client form */
               <div className="border border-gray-200 rounded-lg p-4 space-y-3 mb-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input value={newClientFirst} onChange={e => setNewClientFirst(e.target.value)} placeholder="Имя *"
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
                   <input value={newClientLast} onChange={e => setNewClientLast(e.target.value)} placeholder="Фамилия"
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+                  <input value={newClientFirst} onChange={e => setNewClientFirst(e.target.value)} placeholder="Имя *"
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
                   <input value={newClientMiddle} onChange={e => setNewClientMiddle(e.target.value)} placeholder="Отчество"
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
@@ -548,50 +545,37 @@ export default function CreateContractPage() {
             </div>
           </div>
 
-          {/* Время учитывать — for existing partial debts */}
+          {/* Фактический отсчёт — overrides общий срок when at least one of the fields > 0 */}
           <div className="bg-white rounded-xl p-6 border border-gray-100">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useEffectiveTerm}
-                onChange={e => setUseEffectiveTerm(e.target.checked)}
-                className="mt-1 w-4 h-4 accent-[#5B5BD6] cursor-pointer"
-              />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-gray-800">Время учитывать</div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                  Для существующих договоров: укажите фактически оставшийся срок. Срок рассрочки сохраняется как есть (для истории), а расчёт идёт по оставшемуся времени.
-                </div>
+            <div className="text-sm font-medium text-gray-800">Фактический отсчёт</div>
+            <div className="text-xs text-gray-500 mt-0.5 mb-3">
+              Укажите, сколько месяцев и/или дней осталось до полного погашения. Если оба поля пустые — расчёт идёт по полю «Общий срок».
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Месяцы</label>
+                <input
+                  value={actualMonths}
+                  onChange={e => setActualMonths(e.target.value.replace(/\D/g, ''))}
+                  type="text" inputMode="numeric"
+                  placeholder="напр. 3"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+                />
               </div>
-            </label>
-            {useEffectiveTerm && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Единица</label>
-                  <div className="relative">
-                    <select
-                      value={effectiveUnit}
-                      onChange={e => setEffectiveUnit(e.target.value as 'months' | 'days')}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] appearance-none bg-white"
-                    >
-                      <option value="months">Месяцы</option>
-                      <option value="days">Дни</option>
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Осталось {effectiveUnit === 'months' ? 'месяцев' : 'дней'}
-                  </label>
-                  <input
-                    value={effectiveValue}
-                    onChange={e => setEffectiveValue(e.target.value.replace(/\D/g, ''))}
-                    type="text" inputMode="numeric"
-                    placeholder={effectiveUnit === 'months' ? 'напр. 2' : 'напр. 30'}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Дни</label>
+                <input
+                  value={actualDays}
+                  onChange={e => setActualDays(e.target.value.replace(/\D/g, ''))}
+                  type="text" inputMode="numeric"
+                  placeholder="напр. 15"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+                />
+              </div>
+            </div>
+            {hasActualTerm && (
+              <div className="mt-3 text-xs text-[#5B5BD6] bg-[#EEF0FF] rounded-lg px-3 py-2">
+                Платёж будет назначен через {actualTotalDays} {actualTotalDays % 10 === 1 && actualTotalDays % 100 !== 11 ? 'день' : actualTotalDays % 10 >= 2 && actualTotalDays % 10 <= 4 && (actualTotalDays % 100 < 10 || actualTotalDays % 100 >= 20) ? 'дня' : 'дней'} от даты начала.
               </div>
             )}
           </div>
@@ -604,11 +588,6 @@ export default function CreateContractPage() {
               rows={4}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] resize-none" />
           </div>
-
-          <button onClick={handleSubmit}
-            className="flex items-center gap-2 bg-[#5B5BD6] text-white rounded-xl px-6 py-3 font-semibold hover:bg-[#4a4ac4] transition">
-            Создать договор
-          </button>
         </div>
 
         {/* Right calculator */}
@@ -745,6 +724,14 @@ export default function CreateContractPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Submit button — placed at the very bottom, after the calculator */}
+      <div className="mt-6 flex justify-end">
+        <button onClick={handleSubmit} disabled={submitting}
+          className="flex items-center gap-2 bg-[#5B5BD6] text-white rounded-xl px-6 py-3 font-semibold hover:bg-[#4a4ac4] transition disabled:opacity-60 w-full lg:w-auto justify-center">
+          {submitting ? 'Создание...' : 'Создать договор'}
+        </button>
       </div>
 
       {/* Lightbox for passport photos */}
