@@ -114,13 +114,16 @@ export default function CreateContractPage() {
   const hasDiscount = hasCustomTotal && customTotalNum < systemTotal;
   const discountAmount = hasDiscount ? systemTotal - customTotalNum : 0;
 
-  // Фактический отсчёт — if any of the two fields is > 0, single payment scheduled at startDate + (months*30 + days)
+  // Фактический отсчёт — overrides общий срок:
+  //   actualMonths > 0  → that many monthly installments (last installment shifts by actualDays if > 0)
+  //   actualMonths = 0 & actualDays > 0  → single payment, actualDays after startDate
   const actualMonthsNum = parseInt(actualMonths) || 0;
   const actualDaysNum = parseInt(actualDays) || 0;
   const hasActualTerm = actualMonthsNum > 0 || actualDaysNum > 0;
-  const actualTotalDays = actualMonthsNum * 30 + actualDaysNum;
 
-  const effectiveInstallments = hasActualTerm ? 1 : monthsNum;
+  const effectiveInstallments = hasActualTerm
+    ? (actualMonthsNum > 0 ? actualMonthsNum : 1)
+    : monthsNum;
 
   const monthly = effectiveInstallments > 0 ? Math.ceil(effectiveAfterFirst / effectiveInstallments) : 0;
   const total = firstPaymentNum + effectiveAfterFirst;
@@ -143,21 +146,28 @@ export default function CreateContractPage() {
 
   const paymentSchedule = useMemo(() => {
     const baseDate = parseStartDate(startDate);
-    // Фактический отсчёт — single payment scheduled at startDate + (months*30 + days)
-    if (hasActualTerm) {
+    if (effectiveInstallments <= 0) return [];
+
+    // Days-only term (no actualMonths) — single payment after actualDays
+    if (hasActualTerm && actualMonthsNum === 0 && actualDaysNum > 0) {
       const d = new Date(baseDate);
-      d.setDate(d.getDate() + actualTotalDays);
+      d.setDate(d.getDate() + actualDaysNum);
       return [{
         month: 1,
         date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
         amount: effectiveAfterFirst,
       }];
     }
-    if (effectiveInstallments <= 0) return [];
+
+    // Monthly schedule (общий срок OR Фактический отсчёт with actualMonths > 0).
+    // If actualDays > 0 alongside actualMonths, the last installment shifts by that many days.
     const schedule = [];
     for (let i = 0; i < effectiveInstallments; i++) {
       const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i + 1, payDayNum);
       const isLast = i === effectiveInstallments - 1;
+      if (isLast && hasActualTerm && actualMonthsNum > 0 && actualDaysNum > 0) {
+        d.setDate(d.getDate() + actualDaysNum);
+      }
       schedule.push({
         month: i + 1,
         date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -165,7 +175,7 @@ export default function CreateContractPage() {
       });
     }
     return schedule;
-  }, [effectiveInstallments, monthly, lastMonthly, payDayNum, startDate, hasActualTerm, actualTotalDays, effectiveAfterFirst]);
+  }, [effectiveInstallments, monthly, lastMonthly, payDayNum, startDate, hasActualTerm, actualMonthsNum, actualDaysNum, effectiveAfterFirst]);
 
   const clientResults = useMemo(() => {
     if (!clientSearch) return [];
@@ -575,7 +585,15 @@ export default function CreateContractPage() {
             </div>
             {hasActualTerm && (
               <div className="mt-3 text-xs text-[#5B5BD6] bg-[#EEF0FF] rounded-lg px-3 py-2">
-                Платёж будет назначен через {actualTotalDays} {actualTotalDays % 10 === 1 && actualTotalDays % 100 !== 11 ? 'день' : actualTotalDays % 10 >= 2 && actualTotalDays % 10 <= 4 && (actualTotalDays % 100 < 10 || actualTotalDays % 100 >= 20) ? 'дня' : 'дней'} от даты начала.
+                {actualMonthsNum > 0 && actualDaysNum > 0 && (
+                  <>Будет {actualMonthsNum} ежемесячных платежей; последний — на {actualDaysNum} {actualDaysNum === 1 ? 'день' : 'дн.'} позже обычного.</>
+                )}
+                {actualMonthsNum > 0 && actualDaysNum === 0 && (
+                  <>Будет {actualMonthsNum} ежемесячных платежей.</>
+                )}
+                {actualMonthsNum === 0 && actualDaysNum > 0 && (
+                  <>Один платёж через {actualDaysNum} {actualDaysNum === 1 ? 'день' : 'дн.'} от даты начала.</>
+                )}
               </div>
             )}
           </div>
