@@ -680,7 +680,8 @@ export default function ContractsPage() {
             )}
           </button>
         )}
-        {!isViewer && (
+        {/* Tab "Осталось 3 дня" hidden by client request — data + logic preserved, can be restored later */}
+        {false && !isViewer && (
           <button onClick={() => setTab('soon')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition ${
               tab === 'soon' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -713,8 +714,8 @@ export default function ContractsPage() {
         </div>
       )}
 
-      {/* ─── Tab: Soon (1-3 days remaining) ─── */}
-      {tab === 'soon' && !isViewer && (
+      {/* ─── Tab: Soon (1-3 days remaining) — hidden by client request ─── */}
+      {false && tab === 'soon' && !isViewer && (
         <div>
           {soonContracts.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-100 py-16 text-center">
