@@ -507,7 +507,7 @@ export default function ContractsPage() {
   const [sourceFilter, setSourceFilter] = useState('Все');
   const [showColumns, setShowColumns] = useState(false);
   const [columns, setColumns] = useState<Column[]>(DEFAULT_COLUMNS);
-  const [sortKey, setSortKey] = useState<string>('createdAt');
+  const [sortKey, setSortKey] = useState<string>('number');
   const [sortAsc, setSortAsc] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [payContract, setPayContract] = useState<Contract | null>(null);
@@ -541,24 +541,24 @@ export default function ContractsPage() {
     }).sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
   }, [contracts]);
 
-  // Upcoming payments: active contracts with debt where payDay is within 3 days, overdue, or payDay already passed this month
+  // Upcoming payments: ALL overdue contracts (any number of days) + contracts due within 3 days.
+  // Overdue ones go first, sorted by most-overdue. Non-overdue sorted by days remaining.
   const upcomingContracts = useMemo(() => {
     return contracts.filter(c => {
       if (c.remainingDebt <= 0) return false;
       if (c.status === 'Погашен' || c.status === 'Досрочно погашен' || c.status === 'Списан') return false;
-      // Always show overdue contracts
-      if (c.status === 'Просрочен') return true;
-      // Show if payDay already passed this month (payment not yet made)
-      if (isPaymentOverdue(c)) return true;
-      // Show if payDay is within 3 days
-      const days = getDaysUntilPayment(c);
-      return days <= 3;
+      // Any overdue contract — regardless of how many days
+      if (c.status === 'Просрочен' || isPaymentOverdue(c) || getPaymentOverdueDays(c) > 0) return true;
+      // Otherwise show contracts where payment is within 3 days
+      return getDaysUntilPayment(c) <= 3;
     }).sort((a, b) => {
-      // Overdue first, then by days until payment
-      const aOverdue = a.status === 'Просрочен' || isPaymentOverdue(a);
-      const bOverdue = b.status === 'Просрочен' || isPaymentOverdue(b);
-      if (aOverdue && !bOverdue) return -1;
-      if (!aOverdue && bOverdue) return 1;
+      const aOver = getPaymentOverdueDays(a);
+      const bOver = getPaymentOverdueDays(b);
+      if (aOver > 0 || bOver > 0) {
+        // Most overdue first
+        return bOver - aOver;
+      }
+      // Both not overdue — closest payment first
       return getDaysUntilPayment(a) - getDaysUntilPayment(b);
     });
   }, [contracts]);
