@@ -297,6 +297,7 @@ function EditContractModal({ contract, onClose, onSave }: {
   const [paymentStatus, setPaymentStatus] = useState(contract.paymentStatus);
   const [remainingDebt, setRemainingDebt] = useState(String(contract.remainingDebt));
   const [monthlyPayment, setMonthlyPayment] = useState(String(contract.monthlyPayment));
+  const [isLegacyDebt, setIsLegacyDebt] = useState(!!contract.isLegacyDebt);
 
   function handleSave() {
     const updates: Partial<Contract> = {
@@ -312,6 +313,7 @@ function EditContractModal({ contract, onClose, onSave }: {
       paymentStatus,
       remainingDebt: parseFloat(remainingDebt) || 0,
       monthlyPayment: parseFloat(monthlyPayment) || 0,
+      isLegacyDebt,
     };
     onSave(contract.id, updates);
     onClose();
@@ -402,6 +404,23 @@ function EditContractModal({ contract, onClose, onSave }: {
                 {DEFAULT_PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isLegacyDebt}
+                onChange={e => setIsLegacyDebt(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-amber-600 cursor-pointer"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-gray-800">Заношу старую рассрочку</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Включите для уже существующих долгов из бумажных записей. Просрочка будет считаться только от дня оплаты текущего месяца (без учёта прошедшей даты окончания).
+                </div>
+              </div>
+            </label>
           </div>
 
           <div>
