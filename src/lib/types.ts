@@ -45,6 +45,9 @@ export interface Contract {
   effectiveDays?: number;
   /** Date of the most recent payment (DD.MM.YYYY). Used to determine whether the current period is paid. */
   lastPaymentDate?: string;
+  /** True when admin enters a pre-existing debt (legacy). Past periods are ignored;
+   *  overdue is computed only from the current month's payDay. */
+  isLegacyDebt?: boolean;
 }
 
 export interface Partner {

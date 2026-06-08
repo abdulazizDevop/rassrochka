@@ -79,7 +79,8 @@ function initSchema(db: Database.Database) {
       use_effective_term  INTEGER NOT NULL DEFAULT 0,
       effective_months    INTEGER,
       effective_days      INTEGER,
-      last_payment_date   TEXT
+      last_payment_date   TEXT,
+      is_legacy_debt      INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS accounts (
@@ -192,6 +193,9 @@ function initSchema(db: Database.Database) {
   }
   if (!colNames.has('last_payment_date')) {
     db.exec('ALTER TABLE contracts ADD COLUMN last_payment_date TEXT');
+  }
+  if (!colNames.has('is_legacy_debt')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN is_legacy_debt INTEGER NOT NULL DEFAULT 0');
   }
 
   // Migrate: add columns to investors if missing (older DBs)

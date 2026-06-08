@@ -348,7 +348,7 @@ export default function AnalyticsPage() {
   // Income = full sale price (cost + markup) — markup is the main profit from installment service
   const income = filteredContracts.reduce((s, c) => s + (c.cost || 0) + (c.markup || 0), 0);
   // Expenses = what we paid for the product. If purchaseCost is unknown, fall back to cost (zero margin from product itself)
-  const expenses = filteredContracts.reduce((s, c) => s + (c.purchaseCost ?? c.cost ?? 0), 0);
+  const expenses = filteredContracts.reduce((s, c) => s + (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : (c.cost || 0)), 0);
 
   const operationalExpenses = useMemo(() => {
     return ledger.filter(e => {
@@ -418,7 +418,7 @@ export default function AnalyticsPage() {
 
   // Goods totals — respect date/source filter
   const totalGoodsValue = filteredContracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0);
-  const totalCostValue = filteredContracts.reduce((s, c) => s + (c.purchaseCost ?? c.cost), 0);
+  const totalCostValue = filteredContracts.reduce((s, c) => s + (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : c.cost), 0);
   const totalFirstPayment = filteredContracts.reduce((s, c) => s + (c.firstPayment || 0), 0);
 
   const overdueAvgStr = useMemo(() => {
@@ -468,7 +468,7 @@ export default function AnalyticsPage() {
     return Object.entries(map).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 3);
   }, [filteredContracts]);
   const topProductRevenue = productGroups.reduce((s, entry) => s + entry[1].revenue, 0);
-  const contractProductMargin = filteredContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost ?? c.cost)), 0);
+  const contractProductMargin = filteredContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : c.cost)), 0);
   const productCount = new Set(filteredContracts.map(c => c.product || '')).size;
 
   const totalInvested = investors.reduce((s, i) => s + i.invested, 0);
@@ -484,7 +484,7 @@ export default function AnalyticsPage() {
       return d && d >= cutoff;
     });
   }, [contracts]);
-  const last3Profit = last3MonthsContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost ?? c.cost)), 0);
+  const last3Profit = last3MonthsContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : c.cost)), 0);
   const forecastBetter = actualProfit >= last3Profit / 3;
   const forecastIncome = allActive.reduce((s, c) => s + c.monthlyPayment, 0);
   const forecastDebt = allActive.reduce((s, c) => s + (c.remainingDebt || 0), 0);
@@ -573,7 +573,7 @@ export default function AnalyticsPage() {
     contracts.forEach(c => {
       const d = parseDate(c.startDate || c.createdAt);
       if (!d) return;
-      const pc = c.purchaseCost ?? c.cost ?? 0;
+      const pc = c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : (c.cost || 0);
       if (pc > 0) upsert(d).expenses += pc;
     });
     // Plus operational expenses from ledger

@@ -65,6 +65,7 @@ export function collectBackupData(db: Database.Database, exportedAt: string): Ba
     effectiveMonths: r.effective_months,
     effectiveDays: r.effective_days,
     lastPaymentDate: r.last_payment_date,
+    isLegacyDebt: r.is_legacy_debt === 1,
   }));
 
   const accounts = (db.prepare('SELECT * FROM accounts').all() as Row[]).map(r => ({
@@ -266,8 +267,8 @@ export function restoreBackupData(db: Database.Database, raw: Record<string, unk
       id, number, created_at, end_date, client_id, client_name, product, phone, status,
       remaining_debt, monthly_payment, payment_status, cost, purchase_cost, markup,
       first_payment, months, source, tariff, account, start_date, pay_day, comment, approved,
-      use_effective_term, effective_months, effective_days, last_payment_date
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      use_effective_term, effective_months, effective_days, last_payment_date, is_legacy_debt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const r of contractsArr) {
       insContract.run(
         asStr(pick(r, 'id')),
@@ -298,6 +299,7 @@ export function restoreBackupData(db: Database.Database, raw: Record<string, unk
         pick(r, 'effectiveMonths', 'effective_months') !== undefined ? asInt(pick(r, 'effectiveMonths', 'effective_months')) : null,
         pick(r, 'effectiveDays', 'effective_days') !== undefined ? asInt(pick(r, 'effectiveDays', 'effective_days')) : null,
         pick(r, 'lastPaymentDate', 'last_payment_date') !== undefined ? asStr(pick(r, 'lastPaymentDate', 'last_payment_date')) : null,
+        asInt(pick(r, 'isLegacyDebt', 'is_legacy_debt')),
       );
     }
     restored.contracts = contractsArr.length;

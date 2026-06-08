@@ -78,6 +78,8 @@ export default function CreateContractPage() {
   // "Фактический отсчёт" — overrides общий срок when at least one field > 0
   const [actualMonths, setActualMonths] = useState('');
   const [actualDays, setActualDays] = useState('');
+  // Contract mode: 'new' (first payment next month) or 'legacy' (admin enters pre-existing debt)
+  const [contractMode, setContractMode] = useState<'new' | 'legacy'>('new');
 
   // Client mode: 'search' (existing) or 'new'
   const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
@@ -291,6 +293,7 @@ export default function CreateContractPage() {
       useEffectiveTerm: hasActualTerm,
       effectiveMonths: hasActualTerm ? actualMonthsNum : undefined,
       effectiveDays: hasActualTerm ? actualDaysNum : undefined,
+      isLegacyDebt: contractMode === 'legacy',
     };
     setSubmitting(true);
     const ok = await addContract(newContract);
@@ -329,6 +332,40 @@ export default function CreateContractPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Создание договора</h1>
         <p className="text-sm text-gray-500 mt-1">Заполните форму для создания нового договора</p>
+      </div>
+
+      {/* Contract mode toggle */}
+      <div className="mb-4 bg-white rounded-xl p-4 border border-gray-100">
+        <div className="text-sm font-medium text-gray-800 mb-2">Тип договора</div>
+        <div className="flex gap-2 flex-col sm:flex-row">
+          <button
+            type="button"
+            onClick={() => setContractMode('new')}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+              contractMode === 'new'
+                ? 'bg-[#5B5BD6] text-white border-[#5B5BD6]'
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            Новая рассрочка
+          </button>
+          <button
+            type="button"
+            onClick={() => setContractMode('legacy')}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+              contractMode === 'legacy'
+                ? 'bg-amber-500 text-white border-amber-500'
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            Заношу старую
+          </button>
+        </div>
+        <div className="text-xs text-gray-500 mt-2">
+          {contractMode === 'new'
+            ? 'Стандартный режим: первая оплата — со следующего месяца. Просрочка считается от дня оплаты текущего периода.'
+            : 'Перенос существующего долга: прошлые периоды не учитываются. Просрочка считается только от дня оплаты текущего месяца.'}
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">

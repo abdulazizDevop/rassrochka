@@ -19,6 +19,7 @@ const camelToSnakeMap: Record<string, string> = {
   effectiveMonths: 'effective_months',
   effectiveDays: 'effective_days',
   lastPaymentDate: 'last_payment_date',
+  isLegacyDebt: 'is_legacy_debt',
 };
 
 function toSnake(key: string): string {
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       id, number, createdAt, endDate, clientId, clientName, product, phone,
       status, remainingDebt, monthlyPayment, paymentStatus, cost, purchaseCost,
       markup, firstPayment, months, source, tariff, account, startDate, payDay,
-      comment, approved, useEffectiveTerm, effectiveMonths, effectiveDays, lastPaymentDate,
+      comment, approved, useEffectiveTerm, effectiveMonths, effectiveDays, lastPaymentDate, isLegacyDebt,
     } = body;
 
     if (!id) {
@@ -45,8 +46,9 @@ export async function POST(req: NextRequest) {
         id, number, created_at, end_date, client_id, client_name, product, phone,
         status, remaining_debt, monthly_payment, payment_status, cost, purchase_cost,
         markup, first_payment, months, source, tariff, account, start_date, pay_day,
-        comment, approved, use_effective_term, effective_months, effective_days, last_payment_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        comment, approved, use_effective_term, effective_months, effective_days, last_payment_date,
+        is_legacy_debt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       number ?? 0,
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest) {
       effectiveMonths ?? null,
       effectiveDays ?? null,
       lastPaymentDate ?? null,
+      isLegacyDebt ? 1 : 0,
     );
 
     return NextResponse.json({ ok: true, id });
@@ -96,7 +99,7 @@ export async function PATCH(req: NextRequest) {
     for (const [key, value] of Object.entries(updates)) {
       const column = toSnake(key);
       setClauses.push(`${column} = ?`);
-      if (key === 'approved' || key === 'useEffectiveTerm') {
+      if (key === 'approved' || key === 'useEffectiveTerm' || key === 'isLegacyDebt') {
         values.push(value ? 1 : 0);
       } else {
         values.push(value);

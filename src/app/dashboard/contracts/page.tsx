@@ -104,10 +104,13 @@ function isPaymentOverdue(c: Contract): boolean {
   if (c.remainingDebt <= 0) return false;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const firstPay = getFirstPaymentDate(c);
-  if (firstPay && today < firstPay) return false;
-  const end = parseRuDate(c.endDate);
-  if (end && end < today) return true;
+  // Legacy debts ignore past schedule — only the current month's payDay matters
+  if (!c.isLegacyDebt) {
+    const firstPay = getFirstPaymentDate(c);
+    if (firstPay && today < firstPay) return false;
+    const end = parseRuDate(c.endDate);
+    if (end && end < today) return true;
+  }
   const payDay = c.payDay || 1;
   // payDay hasn't passed yet this month — not overdue
   if (now.getDate() <= payDay) return false;
@@ -120,11 +123,13 @@ function getPaymentOverdueDays(c: Contract): number {
   if (c.remainingDebt <= 0) return 0;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const firstPay = getFirstPaymentDate(c);
-  if (firstPay && today < firstPay) return 0;
-  const end = parseRuDate(c.endDate);
-  if (end && end < today) {
-    return Math.floor((today.getTime() - end.getTime()) / (1000 * 60 * 60 * 24));
+  if (!c.isLegacyDebt) {
+    const firstPay = getFirstPaymentDate(c);
+    if (firstPay && today < firstPay) return 0;
+    const end = parseRuDate(c.endDate);
+    if (end && end < today) {
+      return Math.floor((today.getTime() - end.getTime()) / (1000 * 60 * 60 * 24));
+    }
   }
   const payDay = c.payDay || 1;
   if (now.getDate() <= payDay) return 0;
