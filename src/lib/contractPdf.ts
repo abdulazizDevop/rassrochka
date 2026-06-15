@@ -1,6 +1,25 @@
-import { Contract, Client } from './types';
+import { Contract, Client, LedgerEntry } from './types';
 
-export async function downloadContractPdf(contract: Contract, client: Client | undefined, companyName = 'AkhmadPay') {
+/** Real payments for this contract, taken from the ledger (filtered by "#NUMBER" in note). Sorted oldest → newest. */
+function getContractPayments(contract: Contract, ledger?: LedgerEntry[]): { date: string; amount: number }[] {
+  if (!ledger || ledger.length === 0) return [];
+  const marker = `#${contract.number}`;
+  const items = ledger
+    .filter(e => e.operation === 'Платёж клиента' && (e.note?.includes(marker) || e.clientContract?.includes(marker)))
+    .map(e => ({ date: e.date, amount: e.amount }));
+  // Sort by parsed date asc
+  items.sort((a, b) => {
+    const pa = a.date.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+    const pb = b.date.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!pa || !pb) return 0;
+    const da = new Date(+pa[3], +pa[2] - 1, +pa[1]);
+    const db = new Date(+pb[3], +pb[2] - 1, +pb[1]);
+    return da.getTime() - db.getTime();
+  });
+  return items;
+}
+
+export async function downloadContractPdf(contract: Contract, client: Client | undefined, ledger?: LedgerEntry[], companyName = 'AkhmadPay') {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -89,23 +108,52 @@ export async function downloadContractPdf(contract: Contract, client: Client | u
   drawRow('Счёт:', contract.account);
   y += 8;
 
-  // Payment schedule
-  drawSection('График платежей');
-  const [d, m, yr] = contract.startDate.split('.').map(Number);
-  let cur = new Date(yr, m - 1, d);
-  const monthly = contract.monthlyPayment;
-  for (let i = 0; i < contract.months; i++) {
-    cur = new Date(cur);
-    cur.setMonth(cur.getMonth() + 1);
-    const dateStr = cur.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  // Payments — real history from ledger if available, otherwise the planned schedule
+  const realPayments = getContractPayments(contract, ledger);
+  if (realPayments.length > 0) {
+    drawSection('История платежей');
+    realPayments.forEach((p, i) => {
+      if (y > canvas.height - 120) return;
+      ctx.fillStyle = '#374151';
+      ctx.font = '12px Arial';
+      ctx.fillText(`${i + 1}. ${p.date}`, 30, y);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText(`${p.amount.toLocaleString('ru-RU')} ₽`, 230, y);
+      y += 18;
+    });
+    const totalPaid = realPayments.reduce((s, p) => s + p.amount, 0);
+    y += 4;
     ctx.fillStyle = '#374151';
-    ctx.font = '12px Arial';
-    ctx.fillText(`${i + 1}. ${dateStr}`, 30, y);
-    ctx.fillStyle = '#111827';
     ctx.font = 'bold 12px Arial';
-    ctx.fillText(`${monthly.toLocaleString('ru-RU')} ₽`, 230, y);
+    ctx.fillText('Итого оплачено:', 30, y);
+    ctx.fillStyle = '#16a34a';
+    ctx.fillText(`${totalPaid.toLocaleString('ru-RU')} ₽`, 230, y);
     y += 18;
-    if (y > canvas.height - 120) break; // prevent overflow
+    ctx.fillStyle = '#374151';
+    ctx.fillText('Остаток долга:', 30, y);
+    ctx.fillStyle = contract.remainingDebt > 0 ? '#dc2626' : '#16a34a';
+    ctx.fillText(`${contract.remainingDebt.toLocaleString('ru-RU')} ₽`, 230, y);
+    y += 18;
+  } else {
+    // No payments yet — show the planned schedule as a forecast
+    drawSection('График платежей (прогноз)');
+    const [d, m, yr] = contract.startDate.split('.').map(Number);
+    let cur = new Date(yr, m - 1, d);
+    const monthly = contract.monthlyPayment;
+    for (let i = 0; i < contract.months; i++) {
+      cur = new Date(cur);
+      cur.setMonth(cur.getMonth() + 1);
+      const dateStr = cur.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      ctx.fillStyle = '#374151';
+      ctx.font = '12px Arial';
+      ctx.fillText(`${i + 1}. ${dateStr}`, 30, y);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText(`${monthly.toLocaleString('ru-RU')} ₽`, 230, y);
+      y += 18;
+      if (y > canvas.height - 120) break; // prevent overflow
+    }
   }
 
   // Comment
@@ -172,7 +220,7 @@ export async function downloadContractPdf(contract: Contract, client: Client | u
   doc.save(`Договор_№${contract.number}_${contract.clientName.replace(/\s+/g, '_')}.pdf`);
 }
 
-export function downloadContractExcel(contract: Contract, client: Client | undefined) {
+export function downloadContractExcel(contract: Contract, client: Client | undefined, ledger?: LedgerEntry[]) {
   const XLSX = require('xlsx');
   const wb = XLSX.utils.book_new();
 
@@ -206,15 +254,26 @@ export function downloadContractExcel(contract: Contract, client: Client | undef
     ['Комментарий', contract.comment ?? ''],
   ];
 
-  // Payment schedule
-  rows.push(['', ''], ['График платежей', '']);
-  const [d, m, yr] = contract.startDate.split('.').map(Number);
-  let cur = new Date(yr, m - 1, d);
-  for (let i = 0; i < contract.months; i++) {
-    cur = new Date(cur);
-    cur.setMonth(cur.getMonth() + 1);
-    const dateStr = cur.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    rows.push([`Платёж ${i + 1} (${dateStr})`, contract.monthlyPayment]);
+  // Payments — real history from ledger if available, otherwise the planned schedule
+  const realPayments = getContractPayments(contract, ledger);
+  if (realPayments.length > 0) {
+    rows.push(['', ''], ['История платежей', '']);
+    realPayments.forEach((p, i) => {
+      rows.push([`Платёж ${i + 1} (${p.date})`, p.amount]);
+    });
+    const totalPaid = realPayments.reduce((s, p) => s + p.amount, 0);
+    rows.push(['Итого оплачено', totalPaid]);
+    rows.push(['Остаток долга', contract.remainingDebt]);
+  } else {
+    rows.push(['', ''], ['График платежей (прогноз)', '']);
+    const [d, m, yr] = contract.startDate.split('.').map(Number);
+    let cur = new Date(yr, m - 1, d);
+    for (let i = 0; i < contract.months; i++) {
+      cur = new Date(cur);
+      cur.setMonth(cur.getMonth() + 1);
+      const dateStr = cur.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      rows.push([`Платёж ${i + 1} (${dateStr})`, contract.monthlyPayment]);
+    }
   }
 
   // Passport photo links

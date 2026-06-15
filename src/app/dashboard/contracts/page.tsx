@@ -514,7 +514,7 @@ function UpcomingCard({ contract, onPay, isViewer }: {
 
 /* ─── Main Page ─── */
 export default function ContractsPage() {
-  const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry, settings } = useApp();
+  const { contracts, deleteContract, updateContract, currentUser, clients, depositAccount, addAuditEntry, settings, ledger } = useApp();
   const SOURCES = settings.paymentMethods ?? DEFAULT_SOURCES;
   const STATUSES = settings.contractStatuses ?? DEFAULT_STATUSES;
   const PAYMENT_STATUSES = settings.paymentStatuses ?? DEFAULT_PAYMENT_STATUSES;
@@ -861,12 +861,12 @@ export default function ContractsPage() {
                           <MessageCircle size={16} />
                         </button>
                         <button title="Скачать PDF"
-                          onClick={async () => { const client = clients.find(cl => cl.id === c.clientId); await downloadContractPdf(c, client); }}
+                          onClick={async () => { const client = clients.find(cl => cl.id === c.clientId); await downloadContractPdf(c, client, ledger); }}
                           className="text-gray-400 hover:text-red-500 transition">
                           <FileText size={16} />
                         </button>
                         <button title="Скачать Excel"
-                          onClick={() => { const client = clients.find(cl => cl.id === c.clientId); downloadContractExcel(c, client); }}
+                          onClick={() => { const client = clients.find(cl => cl.id === c.clientId); downloadContractExcel(c, client, ledger); }}
                           className="text-gray-400 hover:text-green-600 transition">
                           <FileSpreadsheet size={16} />
                         </button>
