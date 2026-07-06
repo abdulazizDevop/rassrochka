@@ -48,6 +48,9 @@ export interface Contract {
   /** True when admin enters a pre-existing debt (legacy). Past periods are ignored;
    *  overdue is computed only from the current month's payDay. */
   isLegacyDebt?: boolean;
+  /** The full sale price at creation time (customTotal if the admin overrode it, else systemTotal).
+   *  Used by analytics to compute profit against the original cost/purchaseCost. */
+  initialTotal?: number;
 }
 
 export interface Partner {

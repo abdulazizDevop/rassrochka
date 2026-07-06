@@ -294,6 +294,7 @@ export default function CreateContractPage() {
       effectiveMonths: hasActualTerm ? actualMonthsNum : undefined,
       effectiveDays: hasActualTerm ? actualDaysNum : undefined,
       isLegacyDebt: contractMode === 'legacy',
+      initialTotal: effectiveTotal,
     };
     setSubmitting(true);
     const ok = await addContract(newContract);

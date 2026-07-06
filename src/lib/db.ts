@@ -80,7 +80,8 @@ function initSchema(db: Database.Database) {
       effective_months    INTEGER,
       effective_days      INTEGER,
       last_payment_date   TEXT,
-      is_legacy_debt      INTEGER NOT NULL DEFAULT 0
+      is_legacy_debt      INTEGER NOT NULL DEFAULT 0,
+      initial_total       REAL
     );
 
     CREATE TABLE IF NOT EXISTS accounts (
@@ -196,6 +197,9 @@ function initSchema(db: Database.Database) {
   }
   if (!colNames.has('is_legacy_debt')) {
     db.exec('ALTER TABLE contracts ADD COLUMN is_legacy_debt INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!colNames.has('initial_total')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN initial_total REAL');
   }
 
   // Migrate: add columns to investors if missing (older DBs)

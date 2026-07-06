@@ -51,6 +51,7 @@ export async function GET() {
       effectiveDays: r.effective_days,
       lastPaymentDate: r.last_payment_date,
       isLegacyDebt: r.is_legacy_debt === 1,
+      initialTotal: r.initial_total,
     }));
 
     // --- Accounts ---

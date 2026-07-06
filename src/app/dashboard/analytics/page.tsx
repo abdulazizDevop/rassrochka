@@ -345,10 +345,16 @@ export default function AnalyticsPage() {
   const writtenOffContracts = contracts.filter(c => c.status === 'Списан');
   const writtenOffDebt = writtenOffContracts.reduce((s, c) => s + (c.remainingDebt || 0), 0);
 
-  // Income = full sale price (cost + markup) — markup is the main profit from installment service
-  const income = filteredContracts.reduce((s, c) => s + (c.cost || 0) + (c.markup || 0), 0);
-  // Expenses = what we paid for the product. If purchaseCost is unknown, fall back to cost (zero margin from product itself)
-  const expenses = filteredContracts.reduce((s, c) => s + (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : (c.cost || 0)), 0);
+  // Full sale price per contract — initialTotal saved at creation (customTotal or systemTotal).
+  // For legacy contracts (no initialTotal), fall back to cost + markup.
+  const saleTotal = (c: typeof filteredContracts[number]) => c.initialTotal ?? ((c.cost || 0) + (c.markup || 0));
+  // Product cost per contract — purchaseCost when filled, otherwise cost (the admin often puts the buy price into "Стоимость").
+  const productCost = (c: typeof filteredContracts[number]) => (c.purchaseCost && c.purchaseCost > 0) ? c.purchaseCost : (c.cost || 0);
+
+  // Income = full sale price (initialTotal or cost + markup)
+  const income = filteredContracts.reduce((s, c) => s + saleTotal(c), 0);
+  // Expenses = what we paid for the product
+  const expenses = filteredContracts.reduce((s, c) => s + productCost(c), 0);
 
   const operationalExpenses = useMemo(() => {
     return ledger.filter(e => {
@@ -393,7 +399,7 @@ export default function AnalyticsPage() {
   // (Lifetime value — includes fully paid-off contracts; excludes only Списан.)
   const filteredForLtv = filteredContracts.filter(c => c.status !== 'Списан');
   const ltv = filteredForLtv.length > 0
-    ? Math.round(filteredForLtv.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / filteredForLtv.length)
+    ? Math.round(filteredForLtv.reduce((s, c) => s + saleTotal(c), 0) / filteredForLtv.length)
     : 0;
   const avgMonths = filteredContracts.length > 0
     ? (filteredContracts.reduce((s, c) => s + (c.months || 0), 0) / filteredContracts.length).toFixed(1)
@@ -417,8 +423,8 @@ export default function AnalyticsPage() {
   const filteredActive = filteredContracts.filter(c => c.status === 'В процессе');
 
   // Goods totals — respect date/source filter
-  const totalGoodsValue = filteredContracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0);
-  const totalCostValue = filteredContracts.reduce((s, c) => s + (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : c.cost), 0);
+  const totalGoodsValue = filteredContracts.reduce((s, c) => s + saleTotal(c), 0);
+  const totalCostValue = filteredContracts.reduce((s, c) => s + productCost(c), 0);
   const totalFirstPayment = filteredContracts.reduce((s, c) => s + (c.firstPayment || 0), 0);
 
   const overdueAvgStr = useMemo(() => {
@@ -463,12 +469,12 @@ export default function AnalyticsPage() {
       const key = c.product || 'Без названия';
       if (!map[key]) map[key] = { count: 0, revenue: 0 };
       map[key].count++;
-      map[key].revenue += c.cost + (c.markup || 0);
+      map[key].revenue += saleTotal(c);
     });
     return Object.entries(map).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 3);
   }, [filteredContracts]);
   const topProductRevenue = productGroups.reduce((s, entry) => s + entry[1].revenue, 0);
-  const contractProductMargin = filteredContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : c.cost)), 0);
+  const contractProductMargin = filteredContracts.reduce((s, c) => s + (saleTotal(c) - productCost(c)), 0);
   const productCount = new Set(filteredContracts.map(c => c.product || '')).size;
 
   const totalInvested = investors.reduce((s, i) => s + i.invested, 0);
@@ -484,7 +490,7 @@ export default function AnalyticsPage() {
       return d && d >= cutoff;
     });
   }, [contracts]);
-  const last3Profit = last3MonthsContracts.reduce((s, c) => s + ((c.cost + (c.markup || 0)) - (c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : c.cost)), 0);
+  const last3Profit = last3MonthsContracts.reduce((s, c) => s + (saleTotal(c) - productCost(c)), 0);
   const forecastBetter = actualProfit >= last3Profit / 3;
   const forecastIncome = allActive.reduce((s, c) => s + c.monthlyPayment, 0);
   const forecastDebt = allActive.reduce((s, c) => s + (c.remainingDebt || 0), 0);
@@ -502,7 +508,7 @@ export default function AnalyticsPage() {
         const label = d.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
         if (!map[key]) map[key] = { label, count: 0, revenue: 0, avgInstallment: 0, installments: [] };
         map[key].count++;
-        map[key].revenue += c.cost + (c.markup || 0);
+        map[key].revenue += saleTotal(c);
         if (c.monthlyPayment > 0) map[key].installments.push(c.monthlyPayment);
       });
       return Object.entries(map)
@@ -526,7 +532,7 @@ export default function AnalyticsPage() {
         const key = c.product || 'Не указан';
         if (!map[key]) map[key] = { name: key, count: 0, revenue: 0, avgCost: 0, costs: [] };
         map[key].count++;
-        map[key].revenue += c.cost + (c.markup || 0);
+        map[key].revenue += saleTotal(c);
         map[key].costs.push(c.cost);
       });
       return Object.values(map)
@@ -550,7 +556,7 @@ export default function AnalyticsPage() {
 
     const avgContractSum = useMemo(() => {
       if (!contracts.length) return 0;
-      return Math.round(contracts.reduce((s, c) => s + c.cost + (c.markup || 0), 0) / contracts.length);
+      return Math.round(contracts.reduce((s, c) => s + saleTotal(c), 0) / contracts.length);
     }, [contracts]);
 
   // Monthly chart: income = full contract value (cost + markup) grouped by creation month.
@@ -563,17 +569,17 @@ export default function AnalyticsPage() {
       if (!map[key]) map[key] = { month: label, income: 0, expenses: 0, _sortKey: key };
       return map[key];
     };
-    // Income from contract sales (cost + markup)
+    // Income from contract sales (initialTotal or cost + markup)
     contracts.forEach(c => {
       const d = parseDate(c.startDate || c.createdAt);
       if (!d) return;
-      upsert(d).income += (c.cost || 0) + (c.markup || 0);
+      upsert(d).income += saleTotal(c);
     });
     // Expenses from purchase cost (recorded on contract creation month)
     contracts.forEach(c => {
       const d = parseDate(c.startDate || c.createdAt);
       if (!d) return;
-      const pc = c.purchaseCost && c.purchaseCost > 0 ? c.purchaseCost : (c.cost || 0);
+      const pc = productCost(c);
       if (pc > 0) upsert(d).expenses += pc;
     });
     // Plus operational expenses from ledger
