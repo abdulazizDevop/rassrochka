@@ -31,13 +31,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/ledger?id=xxx  OR  /api/ledger?notePattern=...  OR  /api/ledger?operationalOnly=1  OR  /api/ledger?all=1
+// DELETE /api/ledger?id=xxx  OR  /api/ledger?notePattern=...  OR  /api/ledger?operationalOnly=1
+// NOTE: an unrestricted all=1 branch was removed after the adversarial-verify audit —
+// nothing in the app needs bulk-wipe; contract payment rows must survive reset.
 export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id');
     const notePattern = req.nextUrl.searchParams.get('notePattern');
     const operationalOnly = req.nextUrl.searchParams.get('operationalOnly');
-    const all = req.nextUrl.searchParams.get('all');
     const db = getDb();
     if (id) {
       db.prepare('DELETE FROM ledger WHERE id = ?').run(id);
@@ -45,10 +46,8 @@ export async function DELETE(req: NextRequest) {
       db.prepare('DELETE FROM ledger WHERE note LIKE ?').run(`%${notePattern}%`);
     } else if (operationalOnly === '1') {
       db.prepare('DELETE FROM ledger WHERE is_operational_expense = 1').run();
-    } else if (all === '1') {
-      db.prepare('DELETE FROM ledger').run();
     } else {
-      return NextResponse.json({ error: 'Missing id, notePattern, operationalOnly, or all' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing id, notePattern, or operationalOnly' }, { status: 400 });
     }
     return NextResponse.json({ ok: true });
   } catch (e: any) {

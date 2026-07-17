@@ -3,6 +3,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { ChevronDown } from 'lucide-react';
 import { motion, useInView, AnimatePresence, type Variants } from 'framer-motion';
+import { isPaymentOverdue, getPaymentOverdueDays } from '@/lib/overdue';
 
 function fmt(n: number) {
   return n.toLocaleString('ru-RU') + ' ₽';
@@ -346,7 +347,16 @@ export default function AnalyticsPage() {
 
   const allActive = contracts.filter(c => c.status === 'В процессе');
   const allDebt = contracts.reduce((s, c) => s + (c.remainingDebt || 0), 0);
-  const overdueContracts = contracts.filter(c => c.status === 'Просрочен');
+  // Real overdue: contract status = 'Просрочен' OR the payment logic (isPaymentOverdue)
+  // detects that the current period is unpaid. Statuses are often stale — the logic
+  // is what the "Ближайшие оплаты" tab uses too.
+  const overdueContracts = contracts.filter(c =>
+    c.status !== 'Погашен' &&
+    c.status !== 'Досрочно погашен' &&
+    c.status !== 'Списан' &&
+    (c.remainingDebt || 0) > 0 &&
+    (c.status === 'Просрочен' || isPaymentOverdue(c))
+  );
   const overdueDebt = overdueContracts.reduce((s, c) => s + (c.remainingDebt || 0), 0);
   const writtenOffContracts = contracts.filter(c => c.status === 'Списан');
   const writtenOffDebt = writtenOffContracts.reduce((s, c) => s + (c.remainingDebt || 0), 0);
@@ -435,12 +445,7 @@ export default function AnalyticsPage() {
 
   const overdueAvgStr = useMemo(() => {
     if (!overdueContracts.length) return 'нет';
-    const now = new Date();
-    const days = overdueContracts.map(c => {
-      const d = parseDate(c.endDate);
-      if (!d) return 0;
-      return Math.max(0, Math.floor((now.getTime() - d.getTime()) / 86400000));
-    });
+    const days = overdueContracts.map(c => getPaymentOverdueDays(c));
     const avg = Math.round(days.reduce((a, b) => a + b, 0) / days.length);
     return `${(avg / 30).toFixed(1)} мес (${avg} дн.)`;
   }, [overdueContracts]);
@@ -1306,16 +1311,19 @@ export default function AnalyticsPage() {
                   if (resetPasswordError) setResetPasswordError(false);
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && resetPassword === RESET_PASSWORD && !resetting) {
-                    (async () => {
-                      setResetting(true);
-                      await clearAllBusinessData();
-                      setResetting(false);
-                      setShowResetConfirm(false);
-                      setResetPassword('');
-                      setResetPasswordError(false);
-                    })();
+                  if (e.key !== 'Enter' || resetting || !resetPassword) return;
+                  if (resetPassword !== RESET_PASSWORD) {
+                    setResetPasswordError(true);
+                    return;
                   }
+                  (async () => {
+                    setResetting(true);
+                    await clearAllBusinessData();
+                    setResetting(false);
+                    setShowResetConfirm(false);
+                    setResetPassword('');
+                    setResetPasswordError(false);
+                  })();
                 }}
                 placeholder="Введите пароль"
                 autoFocus

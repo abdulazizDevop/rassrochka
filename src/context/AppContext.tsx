@@ -237,9 +237,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     apiCall(`/api/ledger?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
   }, [apiCall]);
 
-  // Wipe business data EXCEPT contracts and clients — ledger, investors, pools,
-  // transfers are cleared and account balances are reset to 0. Contracts and the
-  // client directory are preserved by client request so historical debt data stays.
+  // Wipe business data EXCEPT contracts, clients, and their payment ledger.
+  // What is cleared: investors, invest pools, transfers, operational-expense
+  // ledger rows, and account balances → 0. Contract payment ledger rows are
+  // preserved so historical debt data and PDF/Excel exports keep working.
+  //
+  // NOTE: this preserves contract-payment ledger rows by only deleting the
+  // operational-expense subset, so contracts continue to reconcile with
+  // their payment history after a reset. See adversarial-verify finding
+  // for the earlier all=1 branch which broke this invariant.
   const clearAllBusinessData = useCallback(async () => {
     const existing = await fetch('/api/data').then(r => r.ok ? r.json() : null).catch(() => null);
     if (existing) {
@@ -253,11 +259,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ id: acc.id, balance: 0, orgBalance: 0, investorsBalance: 0, investPoolBalance: 0 }),
         });
       }
-      // Wipe all ledger entries on the backend
-      await apiCall('/api/ledger?all=1', { method: 'DELETE' });
+      // Only wipe operational-expense ledger rows — contract payments stay
+      await apiCall('/api/ledger?operationalOnly=1', { method: 'DELETE' });
     }
-    // Clear client-side state — but keep contracts and clients
-    setLedger([]);
+    // Clear client-side state — but keep contracts, clients, and contract-payment ledger rows
+    setLedger(prev => prev.filter(e => e.operation !== 'Списание' || !e.isOperationalExpense));
     setInvestors([]);
     setInvestPools([]);
     setTransfers([]);
