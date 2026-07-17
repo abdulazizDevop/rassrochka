@@ -307,6 +307,9 @@ export default function AnalyticsPage() {
   const [showOpsModal, setShowOpsModal] = useState<false | 'income' | 'expense'>(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
+  // Client requested: only 5 core cards (Договоры / Доходы / Расходы / Задолженность / Прибыль)
+  // shown by default; all other analytics collapsed behind a single toggle.
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
 
   function applyQuick(q: QuickPeriod) {
     const now = new Date();
@@ -750,8 +753,8 @@ export default function AnalyticsPage() {
         </motion.div>
       </motion.div>
 
-      {/* Row 2 */}
-      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      {/* Row 2 — core cards only: Договоры + Задолженность (rest lives under the toggle) */}
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         {/* Contracts */}
         <motion.div variants={cardVariants}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
@@ -820,6 +823,20 @@ export default function AnalyticsPage() {
           </div>
         </motion.div>
 
+      </motion.div>
+
+      {/* Client-facing toggle: hide/show every metric beyond the 5 core ones */}
+      <div className="flex justify-center mb-4">
+        <button
+          onClick={() => setShowAllMetrics(v => !v)}
+          className="flex items-center gap-2 border border-gray-200 bg-white rounded-full px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition"
+        >
+          {showAllMetrics ? 'Скрыть детали' : 'Показать все показатели'}
+        </button>
+      </div>
+
+      {showAllMetrics && (
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         {/* Unit-economics */}
         <motion.div variants={cardVariants}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
@@ -889,8 +906,10 @@ export default function AnalyticsPage() {
           </div>
         </motion.div>
       </motion.div>
+      )}
 
-      {/* Row 3 */}
+      {showAllMetrics && (
+      /* Row 3 */
       <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Products */}
         <motion.div variants={cardVariants}
@@ -996,8 +1015,10 @@ export default function AnalyticsPage() {
           </div>
         </motion.div>
       </motion.div>
+      )}
 
-        {/* ─── Блок: Лучшие месяцы + Рассрочка + Топ товаров ─── */}
+      {showAllMetrics && (
+        /* ─── Блок: Лучшие месяцы + Рассрочка + Топ товаров ─── */
         <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
 
           {/* Лучшие месяцы */}
@@ -1166,8 +1187,10 @@ export default function AnalyticsPage() {
             )}
           </motion.div>
         </motion.div>
+      )}
 
-          {/* 3D Charts */}
+      {showAllMetrics && (
+          /* 3D Charts */
         <motion.div
           variants={containerVariants} initial="hidden" animate="show"
           className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"
@@ -1194,6 +1217,7 @@ export default function AnalyticsPage() {
           <MountainChart data={monthlyChartData} dataKey="expenses" color="#ef4444" />
         </motion.div>
       </motion.div>
+      )}
 
       {/* Operations Modal */}
       <AnimatePresence>
