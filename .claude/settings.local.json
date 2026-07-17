@@ -5,7 +5,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(awk 'NR==1{start=0} /1019|1020|1200|1210|1220|1230|1240|1250|1260|1270|1280|1290|1300/{print}')"
     ]
   }
 }
