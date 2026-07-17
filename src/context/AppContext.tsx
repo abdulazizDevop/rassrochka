@@ -237,32 +237,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     apiCall(`/api/ledger?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
   }, [apiCall]);
 
-  // Wipe all business data — contracts, clients, ledger, investors, pools,
-  // and reset account balances to 0. Used by admins to clear test data.
+  // Wipe business data EXCEPT contracts and clients — ledger, investors, pools,
+  // transfers are cleared and account balances are reset to 0. Contracts and the
+  // client directory are preserved by client request so historical debt data stays.
   const clearAllBusinessData = useCallback(async () => {
-    // Delete each contract on the backend; cascades its ledger entries
-    const existingContracts = await fetch('/api/data').then(r => r.ok ? r.json() : null).catch(() => null);
-    if (existingContracts) {
-      for (const c of existingContracts.contracts ?? []) {
-        await apiCall(`/api/contracts?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
-      }
-      for (const cl of existingContracts.clients ?? []) {
-        await apiCall(`/api/clients?id=${encodeURIComponent(cl.id)}`, { method: 'DELETE' });
-      }
-      for (const inv of existingContracts.investors ?? []) {
+    const existing = await fetch('/api/data').then(r => r.ok ? r.json() : null).catch(() => null);
+    if (existing) {
+      for (const inv of existing.investors ?? []) {
         await apiCall(`/api/investors?id=${encodeURIComponent(inv.id)}`, { method: 'DELETE' });
       }
-      for (const acc of existingContracts.accounts ?? []) {
+      for (const acc of existing.accounts ?? []) {
         await apiCall('/api/accounts', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: acc.id, balance: 0, orgBalance: 0, investorsBalance: 0, investPoolBalance: 0 }),
         });
       }
+      // Wipe all ledger entries on the backend
+      await apiCall('/api/ledger?all=1', { method: 'DELETE' });
     }
-    // Clear client-side state
-    setContracts([]);
-    setClients([]);
+    // Clear client-side state — but keep contracts and clients
     setLedger([]);
     setInvestors([]);
     setInvestPools([]);
