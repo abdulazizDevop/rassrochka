@@ -89,6 +89,28 @@ export default function CreateContractPage() {
   const [newClientFirst, setNewClientFirst] = useState('');
   const [newClientLast, setNewClientLast] = useState('');
   const [newClientMiddle, setNewClientMiddle] = useState('');
+  // Single "ФИО" input — auto-splits into last/first/middle by whitespace.
+  //   1 word:  → firstName (treated as a first name)
+  //   2 words: → lastName + firstName
+  //   3+ words: → lastName + firstName + middleName (rest joined)
+  const [newClientFio, setNewClientFio] = useState('');
+  const updateFio = (value: string) => {
+    setNewClientFio(value);
+    const parts = value.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+      setNewClientLast('');
+      setNewClientFirst(parts[0]);
+      setNewClientMiddle('');
+    } else if (parts.length >= 2) {
+      setNewClientLast(parts[0]);
+      setNewClientFirst(parts[1]);
+      setNewClientMiddle(parts.slice(2).join(' '));
+    } else {
+      setNewClientLast('');
+      setNewClientFirst('');
+      setNewClientMiddle('');
+    }
+  };
   const [newClientPhone, setNewClientPhone] = useState('');
   const [newClientPhotos, setNewClientPhotos] = useState<string[]>([]);
   const [photoLightbox, setPhotoLightbox] = useState<number | null>(null);
@@ -198,8 +220,8 @@ export default function CreateContractPage() {
   };
 
   const handleCreateNewClient = async () => {
-    if (!newClientFirst || !newClientPhone) {
-      setAlertMsg('Укажите имя и телефон клиента');
+    if (!newClientFio.trim() || !newClientPhone) {
+      setAlertMsg('Укажите Ф.И.О. и телефон клиента');
       return;
     }
     const newClient: Client = {
@@ -218,7 +240,7 @@ export default function CreateContractPage() {
     }
     setSelectedClient(newClient);
     setClientMode('search');
-    setNewClientFirst(''); setNewClientLast(''); setNewClientMiddle(''); setNewClientPhone('');
+    setNewClientFirst(''); setNewClientLast(''); setNewClientMiddle(''); setNewClientFio(''); setNewClientPhone('');
     setNewClientPhotos([]);
   };
 
@@ -237,11 +259,8 @@ export default function CreateContractPage() {
         if (query) {
           if (looksLikePhone) {
             if (!newClientPhone) setNewClientPhone(formatRuPhone(query));
-          } else {
-            const parts = query.split(/\s+/).filter(Boolean);
-            if (!newClientLast && parts[0]) setNewClientLast(parts[0]);
-            if (!newClientFirst && parts[1]) setNewClientFirst(parts[1]);
-            if (!newClientMiddle && parts.length > 2) setNewClientMiddle(parts.slice(2).join(' '));
+          } else if (!newClientFio) {
+            updateFio(query);
           }
         }
         setClientMode('new');
@@ -249,8 +268,8 @@ export default function CreateContractPage() {
         return;
       }
       // clientMode === 'new'
-      if (!newClientFirst.trim()) {
-        setAlertMsg('Укажите имя клиента');
+      if (!newClientFio.trim()) {
+        setAlertMsg('Укажите Ф.И.О. клиента');
         return;
       }
       if (!newClientPhone.trim()) {
@@ -443,15 +462,11 @@ export default function CreateContractPage() {
             ) : (
               /* New client form */
               <div className="border border-gray-200 rounded-lg p-4 space-y-3 mb-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input value={newClientLast} onChange={e => setNewClientLast(e.target.value)} placeholder="Фамилия"
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
-                  <input value={newClientFirst} onChange={e => setNewClientFirst(e.target.value)} placeholder="Имя *"
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
-                  <input value={newClientMiddle} onChange={e => setNewClientMiddle(e.target.value)} placeholder="Отчество"
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+                <div className="space-y-3">
+                  <input value={newClientFio} onChange={e => updateFio(e.target.value)} placeholder="Ф.И.О. *"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
                   <input value={newClientPhone} onChange={e => setNewClientPhone(formatRuPhone(e.target.value))} placeholder="+7 (___) ___-__-__"
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6]" />
                 </div>
 
                 {/* Passport photos */}
