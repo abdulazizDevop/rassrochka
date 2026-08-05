@@ -80,6 +80,8 @@ export async function GET() {
       accountName: r.account_name,
       note: r.note,
       isOperationalExpense: r.is_operational_expense === 1,
+      paidForMonth: r.paid_for_month,
+      paymentComment: r.payment_comment,
     }));
 
     // --- Investors ---

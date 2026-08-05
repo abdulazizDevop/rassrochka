@@ -91,6 +91,8 @@ export function collectBackupData(db: Database.Database, exportedAt: string): Ba
     accountName: r.account_name,
     note: r.note,
     isOperationalExpense: r.is_operational_expense === 1,
+    paidForMonth: r.paid_for_month,
+    paymentComment: r.payment_comment,
   }));
 
   const investors = (db.prepare('SELECT * FROM investors').all() as Row[]).map(r => ({
@@ -329,7 +331,7 @@ export function restoreBackupData(db: Database.Database, raw: Record<string, unk
 
     // ── Ledger ────────────────────────────────────────────────
     const ledgerArr = (raw.ledger as Row[] | undefined) ?? [];
-    const insLedger = db.prepare(`INSERT INTO ledger (id, date, user, operation, client_contract, product, amount, account_id, account_name, note, is_operational_expense) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insLedger = db.prepare(`INSERT INTO ledger (id, date, user, operation, client_contract, product, amount, account_id, account_name, note, is_operational_expense, paid_for_month, payment_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const r of ledgerArr) {
       insLedger.run(
         asStr(pick(r, 'id')),
@@ -343,6 +345,8 @@ export function restoreBackupData(db: Database.Database, raw: Record<string, unk
         asStr(pick(r, 'accountName', 'account_name')),
         asStr(pick(r, 'note')),
         asInt(pick(r, 'isOperationalExpense', 'is_operational_expense')),
+        pick(r, 'paidForMonth', 'paid_for_month') !== undefined ? asStr(pick(r, 'paidForMonth', 'paid_for_month')) : null,
+        pick(r, 'paymentComment', 'payment_comment') !== undefined ? asStr(pick(r, 'paymentComment', 'payment_comment')) : null,
       );
     }
     restored.ledger = ledgerArr.length;

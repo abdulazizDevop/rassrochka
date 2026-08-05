@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Client, Contract } from '@/lib/types';
-import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil, User, FileText } from 'lucide-react';
+import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil, User, FileText, CreditCard, FileSpreadsheet } from 'lucide-react';
 
 // ── Passport hover preview ──────────────────────────────────────────────────
 function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: React.RefObject<HTMLSpanElement | null> }) {
@@ -53,12 +53,13 @@ function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: R
 }
 
 // ── Client profile modal (payment history + debt) ───────────────────────────
-function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract }: {
+function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract, onPayContract }: {
   client: Client;
   contracts: Contract[];
-  ledger: { id: string; date: string; amount: number; operation: string; note: string }[];
+  ledger: { id: string; date: string; amount: number; operation: string; note: string; paidForMonth?: string; paymentComment?: string }[];
   onClose: () => void;
   onEditContract?: (c: Contract) => void;
+  onPayContract?: (c: Contract) => void;
 }) {
   const fullName = `${client.lastName || ''} ${client.firstName || ''} ${client.middleName || ''}`.trim() || client.phone || 'Без имени';
   const clientContracts = contracts.filter(c => c.clientId === client.id);
@@ -135,6 +136,15 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
                           c.status === 'Списан' ? 'bg-gray-100 text-gray-500' :
                           'bg-blue-100 text-blue-700'
                         }`}>{c.status}</span>
+                        {onPayContract && c.remainingDebt > 0 && c.status !== 'Погашен' && c.status !== 'Досрочно погашен' && c.status !== 'Списан' && (
+                          <button
+                            onClick={() => onPayContract(c)}
+                            title="Внести оплату"
+                            className="flex items-center gap-1 text-xs text-[#5B5BD6] border border-[#5B5BD6]/30 rounded-lg px-2 py-1 hover:bg-[#EEF0FF] transition"
+                          >
+                            <CreditCard size={12} /> Погасить
+                          </button>
+                        )}
                         {onEditContract && (
                           <button
                             onClick={() => onEditContract(c)}
@@ -162,13 +172,44 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
           {/* Payment history from ledger */}
           {clientPayments.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">История платежей</h3>
-              <div className="border border-gray-100 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">История платежей</h3>
+                <button
+                  onClick={() => {
+                    // Export as CSV (Excel-friendly). Simple, no extra deps.
+                    const rows: string[][] = [['Дата', 'За месяц', 'Сумма (₽)', 'Комментарий', 'Назначение']];
+                    for (const p of clientPayments) {
+                      rows.push([
+                        p.date,
+                        p.paidForMonth ?? '',
+                        String(p.amount),
+                        p.paymentComment ?? '',
+                        p.note,
+                      ]);
+                    }
+                    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+                    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Платежи_${fullName.replace(/\s+/g, '_')}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center gap-1.5 text-xs text-green-600 border border-green-300 rounded-lg px-3 py-1.5 hover:bg-green-50 transition"
+                >
+                  <FileSpreadsheet size={13} /> Excel
+                </button>
+              </div>
+              <div className="border border-gray-100 rounded-lg overflow-hidden overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500">
                       <th className="text-left px-3 py-2 font-medium">Дата</th>
-                      <th className="text-left px-3 py-2 font-medium">Назначение</th>
+                      <th className="text-left px-3 py-2 font-medium">За месяц</th>
+                      <th className="text-left px-3 py-2 font-medium">Назначение / комментарий</th>
                       <th className="text-right px-3 py-2 font-medium">Сумма</th>
                     </tr>
                   </thead>
@@ -176,7 +217,11 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
                     {clientPayments.map(p => (
                       <tr key={p.id} className="border-t border-gray-50">
                         <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.date}</td>
-                        <td className="px-3 py-2 text-gray-500 text-xs">{p.note}</td>
+                        <td className="px-3 py-2 text-gray-700 text-xs whitespace-nowrap">{p.paidForMonth || '—'}</td>
+                        <td className="px-3 py-2 text-gray-500 text-xs">
+                          {p.paymentComment ? <span className="block font-medium text-gray-700">{p.paymentComment}</span> : null}
+                          <span className="text-gray-400">{p.note}</span>
+                        </td>
                         <td className="px-3 py-2 text-right text-green-600 font-medium whitespace-nowrap">{p.amount.toLocaleString('ru-RU')} ₽</td>
                       </tr>
                     ))}
@@ -673,6 +718,10 @@ export default function ClientsPage() {
           onEditContract={isViewer ? undefined : (c) => {
             setProfileClient(null);
             router.push(`/dashboard/contracts?edit=${encodeURIComponent(c.id)}`);
+          }}
+          onPayContract={isViewer ? undefined : (c) => {
+            setProfileClient(null);
+            router.push(`/dashboard/contracts?pay=${encodeURIComponent(c.id)}`);
           }}
         />
       )}

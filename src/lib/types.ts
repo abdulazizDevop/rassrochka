@@ -131,6 +131,10 @@ export interface LedgerEntry {
   accountName: string;
   note: string;
   isOperationalExpense?: boolean;
+  /** For customer payments: which schedule month is being covered — e.g. "1", "2", "внеочередно". */
+  paidForMonth?: string;
+  /** Admin-entered free-form comment attached to this ledger entry. */
+  paymentComment?: string;
 }
 
 export interface Investor {

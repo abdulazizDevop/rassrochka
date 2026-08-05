@@ -35,8 +35,9 @@ interface AppContextType {
   deleteClient: (id: string) => void;
   updateContract: (id: string, updates: Partial<Contract>) => void;
   transferBetweenAccounts: (fromId: string, toId: string, amount: number, comment: string) => boolean;
-  depositAccount: (accountId: string, amount: number, note: string) => void;
+  depositAccount: (accountId: string, amount: number, note: string, opts?: DepositOpts) => void;
   withdrawAccount: (accountId: string, amount: number, note: string, isOperational: boolean) => boolean;
+  updateLedgerEntry: (id: string, updates: Partial<LedgerEntry>) => void;
   addAccount: (account: Account) => void;
   deleteAccount: (id: string) => void;
     addInvestor: (investor: Investor, depositAmount?: number) => Promise<boolean>;
@@ -55,6 +56,15 @@ interface AppContextType {
   createBackup: () => void;
   deleteBackup: (id: string) => void;
 }
+
+export type DepositOpts = {
+  operation?: string;         // default 'Пополнение'
+  clientContract?: string;    // "ФИО (#N)"
+  product?: string;
+  paidForMonth?: string;      // schedule month label, e.g. "3 (01.08.2026)"
+  paymentComment?: string;    // admin free-form
+  customDate?: string;        // override the "now" timestamp (used for backdated payments)
+};
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -235,6 +245,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return prev.filter(e => e.id !== id);
     });
     apiCall(`/api/ledger?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }, [apiCall]);
+
+  const updateLedgerEntry = useCallback((id: string, updates: Partial<LedgerEntry>) => {
+    setLedger(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+    apiCall('/api/ledger', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...updates }),
+    });
   }, [apiCall]);
 
   // Wipe business data EXCEPT contracts, clients, and their payment ledger.
@@ -677,7 +696,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return success;
   }, [apiCall, currentUser]);
 
-  const depositAccount = useCallback((accountId: string, amount: number, note: string) => {
+  const depositAccount = useCallback((accountId: string, amount: number, note: string, opts?: DepositOpts) => {
     setAccounts(prev => {
       const updated = prev.map(a => a.id === accountId ? { ...a, balance: a.balance + amount } : a);
       const acc = updated.find(a => a.id === accountId);
@@ -691,16 +710,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
     const accName = accounts.find(a => a.id === accountId)?.name ?? accountId;
-    const date = nowStr();
+    const date = opts?.customDate || nowStr();
     const ledgerEntry: LedgerEntry = {
       id: String(Date.now()),
       date,
       user: currentUser?.name ?? 'Админ',
-      operation: 'Пополнение',
+      operation: opts?.operation ?? 'Пополнение',
       amount,
       accountId,
       accountName: accName,
       note: note || 'Пополнение счёта',
+      clientContract: opts?.clientContract,
+      product: opts?.product,
+      paidForMonth: opts?.paidForMonth,
+      paymentComment: opts?.paymentComment,
     };
     setLedger(prev => [ledgerEntry, ...prev]);
     apiCall('/api/ledger', {
@@ -977,7 +1000,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       transferBetweenAccounts, depositAccount, withdrawAccount,
       addAccount, deleteAccount,
       addInvestor, deleteInvestor,
-      addAuditEntry, clearAuditLog, clearOperationalExpenses, deleteLedgerEntry, clearAllBusinessData,
+      addAuditEntry, clearAuditLog, clearOperationalExpenses, deleteLedgerEntry, updateLedgerEntry, clearAllBusinessData,
       updateSettings, addTariff, updateTariff, deleteTariff,
       addProduct, deleteProduct,
       createBackup, deleteBackup,

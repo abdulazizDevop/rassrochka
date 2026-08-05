@@ -105,7 +105,9 @@ function initSchema(db: Database.Database) {
       account_id            TEXT NOT NULL,
       account_name          TEXT NOT NULL,
       note                  TEXT NOT NULL DEFAULT '',
-      is_operational_expense INTEGER NOT NULL DEFAULT 0
+      is_operational_expense INTEGER NOT NULL DEFAULT 0,
+      paid_for_month        TEXT,
+      payment_comment       TEXT
     );
 
     CREATE TABLE IF NOT EXISTS investors (
@@ -200,6 +202,16 @@ function initSchema(db: Database.Database) {
   }
   if (!colNames.has('initial_total')) {
     db.exec('ALTER TABLE contracts ADD COLUMN initial_total REAL');
+  }
+
+  // Migrate: add paid_for_month + payment_comment to ledger if missing
+  const ledgerCols = db.prepare('PRAGMA table_info(ledger)').all() as { name: string }[];
+  const ledgerColNames = new Set(ledgerCols.map(c => c.name));
+  if (!ledgerColNames.has('paid_for_month')) {
+    db.exec('ALTER TABLE ledger ADD COLUMN paid_for_month TEXT');
+  }
+  if (!ledgerColNames.has('payment_comment')) {
+    db.exec('ALTER TABLE ledger ADD COLUMN payment_comment TEXT');
   }
 
   // Migrate: add columns to investors if missing (older DBs)

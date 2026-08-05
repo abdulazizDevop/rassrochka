@@ -5,13 +5,13 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const { id, date, user, operation, clientContract, product, amount, accountId, accountName, note, isOperationalExpense } = await req.json();
+    const { id, date, user, operation, clientContract, product, amount, accountId, accountName, note, isOperationalExpense, paidForMonth, paymentComment } = await req.json();
     if (!id || !operation) {
       return NextResponse.json({ error: 'id and operation are required' }, { status: 400 });
     }
     const db = getDb();
     db.prepare(
-      `INSERT INTO ledger (id, date, user, operation, client_contract, product, amount, account_id, account_name, note, is_operational_expense) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO ledger (id, date, user, operation, client_contract, product, amount, account_id, account_name, note, is_operational_expense, paid_for_month, payment_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       date ?? '',
@@ -24,8 +24,45 @@ export async function POST(req: NextRequest) {
       accountName ?? '',
       note ?? '',
       isOperationalExpense ? 1 : 0,
+      paidForMonth ?? null,
+      paymentComment ?? null,
     );
     return NextResponse.json({ ok: true, id });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// PATCH /api/ledger — update an existing ledger row (amount, date, note, paidForMonth, paymentComment)
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, ...updates } = body;
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    const camelToSnake: Record<string, string> = {
+      clientContract: 'client_contract',
+      accountId: 'account_id',
+      accountName: 'account_name',
+      isOperationalExpense: 'is_operational_expense',
+      paidForMonth: 'paid_for_month',
+      paymentComment: 'payment_comment',
+    };
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    for (const [key, value] of Object.entries(updates)) {
+      const column = camelToSnake[key] || key;
+      setClauses.push(`${column} = ?`);
+      if (key === 'isOperationalExpense') {
+        values.push(value ? 1 : 0);
+      } else {
+        values.push(value);
+      }
+    }
+    if (setClauses.length === 0) return NextResponse.json({ ok: true });
+    values.push(id);
+    const db = getDb();
+    db.prepare(`UPDATE ledger SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

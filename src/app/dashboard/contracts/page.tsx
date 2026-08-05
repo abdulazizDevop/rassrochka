@@ -199,11 +199,41 @@ function LabeledSelect({
 function PaymentModal({ contract, onClose, onPay }: {
   contract: Contract;
   onClose: () => void;
-  onPay: (contract: Contract, amount: number) => void;
+  onPay: (contract: Contract, amount: number, opts: { paidForMonth: string; paymentDate: string; paymentComment: string }) => void;
 }) {
   const [amount, setAmount] = useState(String(contract.monthlyPayment));
   const amountNum = parseFloat(amount) || 0;
   const isFullPayoff = amountNum >= contract.remainingDebt;
+
+  // Payment-schedule options for the "оплата за месяц" dropdown.
+  const monthOptions = useMemo(() => {
+    const parseStartDate = (s: string): Date => {
+      const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      if (!m) return new Date();
+      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    };
+    const base = parseStartDate(contract.startDate || contract.createdAt);
+    const payDay = contract.payDay || 1;
+    const total = contract.effectiveMonths || contract.months || 1;
+    const items: { key: string; label: string }[] = [];
+    for (let i = 0; i < total; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() + i + 1, payDay);
+      items.push({
+        key: String(i + 1),
+        label: `${i + 1}-й (${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })})`,
+      });
+    }
+    items.push({ key: 'внеочередно', label: 'Внеочередной платёж' });
+    return items;
+  }, [contract.startDate, contract.createdAt, contract.payDay, contract.effectiveMonths, contract.months]);
+
+  const [paidForMonth, setPaidForMonth] = useState(monthOptions[0]?.label ?? '');
+  const today = useMemo(() => {
+    const n = new Date();
+    return `${String(n.getDate()).padStart(2, '0')}.${String(n.getMonth() + 1).padStart(2, '0')}.${n.getFullYear()}`;
+  }, []);
+  const [paymentDate, setPaymentDate] = useState(today);
+  const [paymentComment, setPaymentComment] = useState('');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -255,6 +285,47 @@ function PaymentModal({ contract, onClose, onPay }: {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Оплата за месяц</label>
+              <select
+                value={paidForMonth}
+                onChange={e => setPaidForMonth(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] bg-white"
+              >
+                {monthOptions.map(m => (
+                  <option key={m.key} value={m.label}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Дата оплаты</label>
+              <input
+                value={paymentDate}
+                onChange={e => {
+                  const d = e.target.value.replace(/\D/g, '').slice(0, 8);
+                  let out = d;
+                  if (d.length > 2) out = d.slice(0, 2) + '.' + d.slice(2);
+                  if (d.length > 4) out = d.slice(0, 2) + '.' + d.slice(2, 4) + '.' + d.slice(4);
+                  setPaymentDate(out);
+                }}
+                placeholder="ДД.ММ.ГГГГ"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Комментарий (необязательно)</label>
+            <textarea
+              value={paymentComment}
+              onChange={e => setPaymentComment(e.target.value)}
+              rows={2}
+              placeholder="Например: Наличкой, частично"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6] resize-none"
+            />
+          </div>
+
           {isFullPayoff && amountNum > 0 && (
             <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 text-sm text-green-700">
               Договор будет полностью погашен
@@ -264,7 +335,7 @@ function PaymentModal({ contract, onClose, onPay }: {
 
         <div className="flex gap-3 px-6 pb-5">
           <button
-            onClick={() => { if (amountNum > 0) onPay(contract, amountNum); }}
+            onClick={() => { if (amountNum > 0) onPay(contract, amountNum, { paidForMonth, paymentDate, paymentComment }); }}
             disabled={amountNum <= 0}
             className="flex-1 bg-[#5B5BD6] text-white rounded-lg py-3 text-sm font-semibold hover:bg-[#4a4ac4] transition disabled:opacity-50">
             {isFullPayoff ? 'Погасить полностью' : `Оплатить ${amountNum.toLocaleString('ru-RU')} ₽`}
@@ -547,6 +618,14 @@ export default function ContractsPage() {
     if (found) setEditContract(found);
   }, [searchParams, contracts]);
 
+  // Auto-open payment modal when navigated with ?pay=<id> (from client profile)
+  useEffect(() => {
+    const payId = searchParams?.get('pay');
+    if (!payId) return;
+    const found = contracts.find(c => c.id === payId);
+    if (found) setPayContract(found);
+  }, [searchParams, contracts]);
+
   useEffect(() => {
     function h(e: MouseEvent) { if (colRef.current && !colRef.current.contains(e.target as Node)) setShowColumns(false); }
     document.addEventListener('mousedown', h);
@@ -622,25 +701,32 @@ export default function ContractsPage() {
     return 'text-gray-700';
   };
 
-  const handlePay = (c: Contract, amount: number) => {
+  const handlePay = (c: Contract, amount: number, opts: { paidForMonth: string; paymentDate: string; paymentComment: string }) => {
     const newDebt = Math.max(0, c.remainingDebt - amount);
     const isPaid = newDebt === 0;
     const isEarly = isPaid && amount >= c.remainingDebt && c.months > 1;
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const today = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`;
+    // lastPaymentDate — use the admin-entered payment date, not today's
     updateContract(c.id, {
       paymentStatus: 'Оплачено',
       remainingDebt: newDebt,
-      lastPaymentDate: today,
+      lastPaymentDate: opts.paymentDate,
       ...(isPaid ? { status: isEarly ? 'Досрочно погашен' : 'Погашен' } : {}),
     });
-    depositAccount('cash', amount, `Платёж клиента ${c.clientName} (#${c.number}) · ${c.product}`);
+    const clientContract = `${c.clientName} (#${c.number})`;
+    const note = `Платёж клиента ${clientContract} · ${c.product}${opts.paidForMonth ? ` · за ${opts.paidForMonth}` : ''}${opts.paymentComment ? ` · ${opts.paymentComment}` : ''}`;
+    depositAccount('cash', amount, note, {
+      operation: 'Платёж клиента',
+      clientContract,
+      product: c.product,
+      paidForMonth: opts.paidForMonth,
+      paymentComment: opts.paymentComment,
+      customDate: opts.paymentDate,
+    });
     addAuditEntry({
       action: 'Создание',
       section: 'Платежи',
       entity: `Платёж ${amount.toLocaleString('ru-RU')} ₽`,
-      details: `Договор #${c.number} (${c.clientName}) · ${c.product}${isPaid ? ' · Полное погашение' : ''}`,
+      details: `Договор #${c.number} (${c.clientName}) · ${c.product}${opts.paidForMonth ? ` · за ${opts.paidForMonth}` : ''}${isPaid ? ' · Полное погашение' : ''}${opts.paymentComment ? ` · ${opts.paymentComment}` : ''}`,
     });
     setPayContract(null);
   };
