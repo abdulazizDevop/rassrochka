@@ -225,22 +225,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLedger(prev => {
       const entry = prev.find(e => e.id === id);
       if (!entry) return prev;
-      // If this was a withdrawal/operational expense, refund the account
-      if (entry.isOperationalExpense && entry.accountId) {
-        setAccounts(accs => accs.map(a =>
-          a.id === entry.accountId ? { ...a, balance: a.balance + entry.amount } : a
-        ));
-        setAccounts(current => {
-          const acc = current.find(a => a.id === entry.accountId);
-          if (acc) {
-            apiCall('/api/accounts', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: entry.accountId, balance: acc.balance }),
-            });
-          }
-          return current;
-        });
+      // Rebalance the account depending on the direction of the deleted entry:
+      //   - operational-expense/withdrawal (Списание) → the account was debited, so refund (+amount)
+      //   - customer payment / deposit (Платёж клиента / Пополнение) → the account was credited, so debit (-amount)
+      if (entry.accountId) {
+        const isRefund = entry.isOperationalExpense || entry.operation === 'Списание';
+        const isReverseDeposit = entry.operation === 'Пополнение' || entry.operation === 'Платёж клиента';
+        const delta = isRefund ? entry.amount : (isReverseDeposit ? -entry.amount : 0);
+        if (delta !== 0) {
+          setAccounts(accs => accs.map(a =>
+            a.id === entry.accountId ? { ...a, balance: a.balance + delta } : a
+          ));
+          setAccounts(current => {
+            const acc = current.find(a => a.id === entry.accountId);
+            if (acc) {
+              apiCall('/api/accounts', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: entry.accountId, balance: acc.balance }),
+              });
+            }
+            return current;
+          });
+        }
       }
       return prev.filter(e => e.id !== id);
     });

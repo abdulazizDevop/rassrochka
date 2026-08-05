@@ -53,19 +53,171 @@ function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: R
 }
 
 // ── Client profile modal (payment history + debt) ───────────────────────────
-function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract, onPayContract }: {
+interface PaymentRow {
+  id: string;
+  date: string;
+  amount: number;
+  operation: string;
+  note: string;
+  paidForMonth?: string;
+  paymentComment?: string;
+}
+
+function EditPaymentDialog({ payment, contract, onClose, onSave }: {
+  payment: PaymentRow;
+  contract?: Contract;
+  onClose: () => void;
+  onSave: (updates: { date: string; paidForMonth?: string; paymentComment?: string }, newAmount: number) => void;
+}) {
+  const [amount, setAmount] = useState(String(payment.amount));
+  const [date, setDate] = useState(payment.date);
+  const [paidForMonth, setPaidForMonth] = useState(payment.paidForMonth ?? '');
+  const [paymentComment, setPaymentComment] = useState(payment.paymentComment ?? '');
+
+  // Build the same month options as PaymentModal
+  const monthOptions = useMemo(() => {
+    if (!contract) return [{ key: 'внеочередно', label: 'Внеочередной платёж' }];
+    const parseStartDate = (s: string): Date => {
+      const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      if (!m) return new Date();
+      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    };
+    const base = parseStartDate(contract.startDate || contract.createdAt);
+    const payDay = contract.payDay || 1;
+    const total = contract.effectiveMonths || contract.months || 1;
+    const items: { key: string; label: string }[] = [];
+    for (let i = 0; i < total; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() + i + 1, payDay);
+      items.push({
+        key: String(i + 1),
+        label: `${i + 1}-й (${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })})`,
+      });
+    }
+    items.push({ key: 'внеочередно', label: 'Внеочередной платёж' });
+    // If current paidForMonth doesn't match any option, keep it as an extra choice
+    if (paidForMonth && !items.some(i => i.label === paidForMonth)) {
+      items.push({ key: 'custom', label: paidForMonth });
+    }
+    return items;
+  }, [contract, paidForMonth]);
+
+  const amountNum = parseFloat(amount) || 0;
+  const canSave = amountNum > 0 && !!date.match(/^\d{2}\.\d{2}\.\d{4}/);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900">Редактировать платёж</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        <div className="px-6 py-4 space-y-3">
+          <div className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+            {payment.note}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Сумма</label>
+            <input
+              value={amount}
+              onChange={e => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">За месяц</label>
+              <select
+                value={paidForMonth}
+                onChange={e => setPaidForMonth(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] bg-white"
+              >
+                <option value="">—</option>
+                {monthOptions.map(m => (
+                  <option key={m.key} value={m.label}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Дата</label>
+              <input
+                value={date}
+                onChange={e => {
+                  const d = e.target.value.replace(/\D/g, '').slice(0, 8);
+                  let out = d;
+                  if (d.length > 2) out = d.slice(0, 2) + '.' + d.slice(2);
+                  if (d.length > 4) out = d.slice(0, 2) + '.' + d.slice(2, 4) + '.' + d.slice(4);
+                  setDate(out);
+                }}
+                placeholder="ДД.ММ.ГГГГ"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Комментарий</label>
+            <textarea
+              value={paymentComment}
+              onChange={e => setPaymentComment(e.target.value)}
+              rows={2}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5B5BD6] resize-none"
+            />
+          </div>
+
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Если сумма изменена, остаток долга по договору и баланс кассы пересчитаются автоматически.
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-5">
+          <button
+            onClick={() => canSave && onSave({ date, paidForMonth: paidForMonth || undefined, paymentComment: paymentComment || undefined }, amountNum)}
+            disabled={!canSave}
+            className="flex-1 bg-[#5B5BD6] text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-[#4a4ac4] transition disabled:opacity-50"
+          >
+            Сохранить
+          </button>
+          <button onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition">
+            Отмена
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract, onPayContract, isViewer }: {
   client: Client;
   contracts: Contract[];
-  ledger: { id: string; date: string; amount: number; operation: string; note: string; paidForMonth?: string; paymentComment?: string }[];
+  ledger: PaymentRow[];
   onClose: () => void;
   onEditContract?: (c: Contract) => void;
   onPayContract?: (c: Contract) => void;
+  isViewer?: boolean;
 }) {
+  const { updateLedgerEntry, deleteLedgerEntry, updateContract, depositAccount, withdrawAccount, addAuditEntry } = useApp();
   const fullName = `${client.lastName || ''} ${client.firstName || ''} ${client.middleName || ''}`.trim() || client.phone || 'Без имени';
   const clientContracts = contracts.filter(c => c.clientId === client.id);
   const [passportPhotos, setPassportPhotos] = useState<{ id: string; url: string }[]>([]);
   const [photosLoading, setPhotosLoading] = useState(true);
   const [photoLightbox, setPhotoLightbox] = useState<number | null>(null);
+  const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState<PaymentRow | null>(null);
+
+  // Extract "#N" from note or clientContract to find the linked contract
+  const findContractForPayment = (p: PaymentRow): Contract | undefined => {
+    const match = p.note?.match(/#(\d+)/);
+    if (!match) return undefined;
+    const number = parseInt(match[1], 10);
+    return clientContracts.find(c => c.number === number);
+  };
 
   useEffect(() => {
     fetch(`/api/upload?clientId=${encodeURIComponent(client.id)}`)
@@ -211,6 +363,7 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
                       <th className="text-left px-3 py-2 font-medium">За месяц</th>
                       <th className="text-left px-3 py-2 font-medium">Назначение / комментарий</th>
                       <th className="text-right px-3 py-2 font-medium">Сумма</th>
+                      {!isViewer && <th className="text-right px-3 py-2 font-medium">Действия</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -223,6 +376,26 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
                           <span className="text-gray-400">{p.note}</span>
                         </td>
                         <td className="px-3 py-2 text-right text-green-600 font-medium whitespace-nowrap">{p.amount.toLocaleString('ru-RU')} ₽</td>
+                        {!isViewer && (
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => setEditingPayment(p)}
+                                title="Редактировать платёж"
+                                className="text-gray-400 hover:text-[#5B5BD6] transition p-1"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => setDeletingPayment(p)}
+                                title="Удалить платёж"
+                                className="text-gray-400 hover:text-red-500 transition p-1"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -279,6 +452,104 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {editingPayment && (
+          <EditPaymentDialog
+            payment={editingPayment}
+            contract={findContractForPayment(editingPayment)}
+            onClose={() => setEditingPayment(null)}
+            onSave={(updates, newAmount) => {
+              const oldAmount = editingPayment.amount;
+              const linkedContract = findContractForPayment(editingPayment);
+              // Update the ledger row itself (metadata + amount)
+              updateLedgerEntry(editingPayment.id, { ...updates, amount: newAmount });
+              // If the amount changed, rebalance the linked contract + cash
+              const delta = newAmount - oldAmount;
+              if (delta !== 0) {
+                if (linkedContract) {
+                  const newDebt = Math.max(0, linkedContract.remainingDebt - delta);
+                  const wasPaid = linkedContract.status === 'Погашен' || linkedContract.status === 'Досрочно погашен';
+                  updateContract(linkedContract.id, {
+                    remainingDebt: newDebt,
+                    ...(newDebt === 0 && !wasPaid ? { status: 'Погашен' as const } : {}),
+                    ...(newDebt > 0 && wasPaid ? { status: 'В процессе' as const } : {}),
+                  });
+                }
+                // Rebalance cash: use dedicated deposit/withdraw so the ledger entry is coherent
+                const correctionNote = `Корректировка платежа ${editingPayment.note}`;
+                if (delta > 0) {
+                  depositAccount('cash', delta, correctionNote);
+                } else {
+                  withdrawAccount('cash', -delta, correctionNote, false);
+                }
+              }
+              addAuditEntry({
+                action: 'Редактирование',
+                section: 'Платежи',
+                entity: `Платёж ${oldAmount.toLocaleString('ru-RU')} → ${newAmount.toLocaleString('ru-RU')} ₽`,
+                details: `${editingPayment.note}${updates.paidForMonth !== editingPayment.paidForMonth ? ` · Месяц: ${editingPayment.paidForMonth ?? '—'} → ${updates.paidForMonth ?? '—'}` : ''}${updates.date !== editingPayment.date ? ` · Дата: ${editingPayment.date} → ${updates.date}` : ''}`,
+              });
+              setEditingPayment(null);
+            }}
+          />
+        )}
+
+        {deletingPayment && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setDeletingPayment(null)}>
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <Trash2 size={18} className="text-red-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Удалить платёж?</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-2">
+                Дата: <strong>{deletingPayment.date}</strong>
+              </p>
+              <p className="text-sm text-gray-600 mb-2">
+                Сумма: <strong className="text-green-600">{deletingPayment.amount.toLocaleString('ru-RU')} ₽</strong>
+                {deletingPayment.paidForMonth ? ` (${deletingPayment.paidForMonth})` : ''}
+              </p>
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                Остаток долга по договору будет увеличен на эту сумму, а баланс кассы уменьшен. Действие записывается в аудит.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeletingPayment(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => {
+                    const linkedContract = findContractForPayment(deletingPayment);
+                    if (linkedContract) {
+                      const newDebt = linkedContract.remainingDebt + deletingPayment.amount;
+                      const wasPaid = linkedContract.status === 'Погашен' || linkedContract.status === 'Досрочно погашен';
+                      updateContract(linkedContract.id, {
+                        remainingDebt: newDebt,
+                        ...(wasPaid ? { status: 'В процессе' as const } : {}),
+                      });
+                    }
+                    // deleteLedgerEntry now debits the cash account for a customer payment,
+                    // so we don't need a manual withdraw here — that would double-book.
+                    deleteLedgerEntry(deletingPayment.id);
+                    addAuditEntry({
+                      action: 'Удаление',
+                      section: 'Платежи',
+                      entity: `Платёж ${deletingPayment.amount.toLocaleString('ru-RU')} ₽`,
+                      details: `${deletingPayment.note}${deletingPayment.paidForMonth ? ` · за ${deletingPayment.paidForMonth}` : ''} · от ${deletingPayment.date}`,
+                    });
+                    setDeletingPayment(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition"
+                >
+                  Удалить
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -714,6 +985,7 @@ export default function ClientsPage() {
           client={profileClient}
           contracts={contracts}
           ledger={ledger}
+          isViewer={isViewer}
           onClose={() => setProfileClient(null)}
           onEditContract={isViewer ? undefined : (c) => {
             setProfileClient(null);
