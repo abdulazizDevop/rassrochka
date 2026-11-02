@@ -8,7 +8,7 @@ Kichik biznes uchun muddatli to'lov (installment/rassrochka) boshqaruv tizimi. M
 - **UI:** Tailwind CSS, Lucide React, Framer Motion, Recharts
 - **PDF:** jspdf + html2canvas
 - **Deploy:** Docker (podman), Timeweb server
-- **Server:** 147.45.96.41 (Timeweb, Rossiya)
+- **Server:** 186.246.0.134:3000 (Timeweb, Rossiya), konteyner `akhmadpay`
 
 ## Arxitektura
 ```
@@ -39,6 +39,8 @@ backups/         — DB backups
 - **Yopilgan shartnomalar:** shartnomalar bo'limida ko'rinmaydi, mijozlar bazasida qoladi
 - **Sources (manbalar):** API orqali dinamik qo'shish/o'chirish (statik emas!)
 - **3 kun qolgan to'lovlar:** alohida "Shoshilinch" bo'limi
+- **To'langan oylar:** `src/lib/installments.ts` — qolgan qarzdan hisoblanadi, chizilgan holda ro'yxatda qoladi (mijoz talabi: yashirilmaydi)
+- **Ledger ↔ shartnoma:** faqat `isContractLedgerEntry` orqali; `includes('#N')` ishlatilmaydi (`#1` `#147` ni ham ushlaydi)
 
 ## Oxirgi ishlar (2026-03/04)
 - Investorlar moduli

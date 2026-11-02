@@ -1,6 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Contract, Client, Product, Account, Transfer, LedgerEntry, Investor, InvestPool, AuditLogEntry, AppSettings, Tariff, BackupEntry, UserAccount, UserRole } from '@/lib/types';
+import { isContractLedgerEntry } from '@/lib/installments';
 
 interface AppContextType {
   contracts: Contract[];
@@ -468,8 +469,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const c = contracts.find(x => x.id === id);
     if (!c) return;
 
-    const marker = `#${c.number}`;
-    const linkedLedger = ledger.filter(e => e.note?.includes(marker));
+    const linkedLedger = ledger.filter(e => isContractLedgerEntry(e, c));
 
     // 2. Calculate balance reversal deltas
     const balanceDelta: Record<string, number> = {};
@@ -495,7 +495,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // 4. Apply all state updates (pure updaters, no side effects)
     setContracts(prev => prev.filter(x => x.id !== id));
-    setLedger(prev => prev.filter(e => !e.note?.includes(marker)));
+    setLedger(prev => prev.filter(e => !isContractLedgerEntry(e, c)));
     if (Object.keys(balanceDelta).length > 0) {
       setAccounts(prev => prev.map(a =>
         balanceDelta[a.id] !== undefined ? { ...a, balance: a.balance + balanceDelta[a.id] } : a
@@ -503,9 +503,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setAuditLog(prev => [auditEntry, ...prev]);
 
-    // 5. All side effects after state updates — each runs exactly once
+    // 5. All side effects after state updates — each runs exactly once.
+    // The server removes the contract's ledger rows in the same DELETE.
     apiCall(`/api/contracts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    apiCall(`/api/ledger?notePattern=${encodeURIComponent(marker)}`, { method: 'DELETE' });
     for (const [accId, delta] of Object.entries(balanceDelta)) {
       const acc = accounts.find(a => a.id === accId);
       if (acc) {

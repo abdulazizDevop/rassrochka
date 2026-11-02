@@ -1,11 +1,11 @@
 import { Contract, Client, LedgerEntry } from './types';
+import { isContractLedgerEntry } from './installments';
 
-/** Real payments for this contract, taken from the ledger (filtered by "#NUMBER" in note). Sorted oldest → newest. */
+/** Real payments for this contract, taken from the ledger. Sorted oldest → newest. */
 function getContractPayments(contract: Contract, ledger?: LedgerEntry[]): { date: string; amount: number }[] {
   if (!ledger || ledger.length === 0) return [];
-  const marker = `#${contract.number}`;
   const items = ledger
-    .filter(e => e.operation === 'Платёж клиента' && (e.note?.includes(marker) || e.clientContract?.includes(marker)))
+    .filter(e => e.operation === 'Платёж клиента' && isContractLedgerEntry(e, contract))
     .map(e => ({ date: e.date, amount: e.amount }));
   // Sort by parsed date asc
   items.sort((a, b) => {

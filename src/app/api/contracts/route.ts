@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { isContractLedgerEntry } from '@/lib/installments';
 
 export const dynamic = 'force-dynamic';
 
@@ -131,12 +132,18 @@ export async function DELETE(req: NextRequest) {
 
     const db = getDb();
     // Find the contract first to know its number for cascade
-    const contract = db.prepare('SELECT number FROM contracts WHERE id = ?').get(id) as { number: number } | undefined;
+    const contract = db.prepare('SELECT number, client_name FROM contracts WHERE id = ?').get(id) as { number: number; client_name: string } | undefined;
 
     if (contract) {
-      const marker = `#${contract.number}`;
-      // Cascade: revert account balances from linked ledger entries
-      const linked = db.prepare(`SELECT account_id, operation, amount FROM ledger WHERE note LIKE ?`).all(`%${marker}%`) as { account_id: string; operation: string; amount: number }[];
+      const marker = `%#${contract.number}%`;
+      // Cascade: revert account balances from linked ledger entries.
+      // LIKE only narrows the rows down: "#1" also hits "#147", the exact check is below.
+      const candidates = db.prepare(`SELECT id, account_id, operation, amount, note, client_contract FROM ledger WHERE note LIKE ? OR client_contract LIKE ?`)
+        .all(marker, marker) as { id: string; account_id: string; operation: string; amount: number; note: string; client_contract: string | null }[];
+      const linked = candidates.filter(e => isContractLedgerEntry(
+        { note: e.note, clientContract: e.client_contract ?? undefined },
+        { number: contract.number, clientName: contract.client_name },
+      ));
       const balanceDelta: Record<string, number> = {};
       for (const e of linked) {
         if (!e.account_id) continue;
@@ -151,7 +158,8 @@ export async function DELETE(req: NextRequest) {
         updateAcc.run(delta, accId);
       }
       // Delete linked ledger entries
-      db.prepare('DELETE FROM ledger WHERE note LIKE ?').run(`%${marker}%`);
+      const deleteEntry = db.prepare('DELETE FROM ledger WHERE id = ?');
+      for (const e of linked) deleteEntry.run(e.id);
     }
 
     db.prepare('DELETE FROM contracts WHERE id = ?').run(id);

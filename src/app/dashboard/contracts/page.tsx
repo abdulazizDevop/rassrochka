@@ -1,11 +1,13 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
-import { Contract } from '@/lib/types';
+import { Contract, LedgerEntry } from '@/lib/types';
 import { MessageCircle, Trash2, ChevronDown, ChevronUp, AlignJustify, FileText, FileSpreadsheet, Clock, CreditCard, X, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { downloadContractPdf, downloadContractExcel } from '@/lib/contractPdf';
+import { EXTRA_PAYMENT_LABEL, getInstallments } from '@/lib/installments';
+import InstallmentSelect from '@/components/InstallmentSelect';
 
 const STATUS_COLORS: Record<string, string> = {
   'Погашен': 'text-green-500',
@@ -196,8 +198,9 @@ function LabeledSelect({
 }
 
 /* ─── Payment Modal ─── */
-function PaymentModal({ contract, onClose, onPay }: {
+function PaymentModal({ contract, ledger, onClose, onPay }: {
   contract: Contract;
+  ledger: LedgerEntry[];
   onClose: () => void;
   onPay: (contract: Contract, amount: number, opts: { paidForMonth: string; paymentDate: string; paymentComment: string }) => void;
 }) {
@@ -205,29 +208,9 @@ function PaymentModal({ contract, onClose, onPay }: {
   const amountNum = parseFloat(amount) || 0;
   const isFullPayoff = amountNum >= contract.remainingDebt;
 
-  // Payment-schedule options for the "оплата за месяц" dropdown.
-  const monthOptions = useMemo(() => {
-    const parseStartDate = (s: string): Date => {
-      const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-      if (!m) return new Date();
-      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-    };
-    const base = parseStartDate(contract.startDate || contract.createdAt);
-    const payDay = contract.payDay || 1;
-    const total = contract.effectiveMonths || contract.months || 1;
-    const items: { key: string; label: string }[] = [];
-    for (let i = 0; i < total; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() + i + 1, payDay);
-      items.push({
-        key: String(i + 1),
-        label: `${i + 1}-й (${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })})`,
-      });
-    }
-    items.push({ key: 'внеочередно', label: 'Внеочередной платёж' });
-    return items;
-  }, [contract.startDate, contract.createdAt, contract.payDay, contract.effectiveMonths, contract.months]);
+  const installments = useMemo(() => getInstallments(contract, ledger), [contract, ledger]);
 
-  const [paidForMonth, setPaidForMonth] = useState(monthOptions[0]?.label ?? '');
+  const [paidForMonth, setPaidForMonth] = useState(installments.find(i => i.status !== 'paid')?.label ?? EXTRA_PAYMENT_LABEL);
   const today = useMemo(() => {
     const n = new Date();
     return `${String(n.getDate()).padStart(2, '0')}.${String(n.getMonth() + 1).padStart(2, '0')}.${n.getFullYear()}`;
@@ -288,15 +271,12 @@ function PaymentModal({ contract, onClose, onPay }: {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Оплата за месяц</label>
-              <select
+              <InstallmentSelect
+                installments={installments}
                 value={paidForMonth}
-                onChange={e => setPaidForMonth(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] bg-white"
-              >
-                {monthOptions.map(m => (
-                  <option key={m.key} value={m.label}>{m.label}</option>
-                ))}
-              </select>
+                monthlyPayment={contract.monthlyPayment}
+                onChange={setPaidForMonth}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Дата оплаты</label>
@@ -371,13 +351,16 @@ function EditContractModal({ contract, onClose, onSave }: {
   const [isLegacyDebt, setIsLegacyDebt] = useState(!!contract.isLegacyDebt);
 
   function handleSave() {
+    const newMonths = parseInt(months) || 0;
+    const newPayDay = parseInt(payDay) || 1;
+    const start = parseRuDate(startDate);
     const updates: Partial<Contract> = {
       product,
       cost: parseFloat(cost) || 0,
       purchaseCost: parseFloat(purchaseCost) || 0,
       firstPayment: parseFloat(firstPayment) || 0,
-      months: parseInt(months) || 0,
-      payDay: parseInt(payDay) || 1,
+      months: newMonths,
+      payDay: newPayDay,
       startDate,
       comment,
       status,
@@ -386,6 +369,16 @@ function EditContractModal({ contract, onClose, onSave }: {
       monthlyPayment: parseFloat(monthlyPayment) || 0,
       isLegacyDebt,
     };
+    // This form shows only the full term, so a new term replaces "Фактический отсчёт" and moves the end date
+    if (newMonths > 0 && newMonths !== contract.months) {
+      updates.useEffectiveTerm = false;
+      updates.effectiveMonths = 0;
+      updates.effectiveDays = 0;
+      if (start) {
+        updates.endDate = new Date(start.getFullYear(), start.getMonth() + newMonths, newPayDay)
+          .toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      }
+    }
     onSave(contract.id, updates);
     onClose();
   }
@@ -608,23 +601,32 @@ export default function ContractsPage() {
   const [payContract, setPayContract] = useState<Contract | null>(null);
   const [editContract, setEditContract] = useState<Contract | null>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const colRef = useRef<HTMLDivElement>(null);
 
-  // Auto-open edit modal when navigated with ?edit=<id>
+  // Auto-open edit modal when navigated with ?edit=<id>.
+  // Both effects drop the param: they rerun on every contracts change, and saving
+  // or paying changes contracts, which would open the same modal again.
   useEffect(() => {
     const editId = searchParams?.get('edit');
     if (!editId) return;
     const found = contracts.find(c => c.id === editId);
-    if (found) setEditContract(found);
-  }, [searchParams, contracts]);
+    if (found) {
+      setEditContract(found);
+      router.replace('/dashboard/contracts', { scroll: false });
+    }
+  }, [searchParams, contracts, router]);
 
   // Auto-open payment modal when navigated with ?pay=<id> (from client profile)
   useEffect(() => {
     const payId = searchParams?.get('pay');
     if (!payId) return;
     const found = contracts.find(c => c.id === payId);
-    if (found) setPayContract(found);
-  }, [searchParams, contracts]);
+    if (found) {
+      setPayContract(found);
+      router.replace('/dashboard/contracts', { scroll: false });
+    }
+  }, [searchParams, contracts, router]);
 
   useEffect(() => {
     function h(e: MouseEvent) { if (colRef.current && !colRef.current.contains(e.target as Node)) setShowColumns(false); }
@@ -982,7 +984,7 @@ export default function ContractsPage() {
 
       {/* Payment Modal */}
       {payContract && (
-        <PaymentModal contract={payContract} onClose={() => setPayContract(null)} onPay={handlePay} />
+        <PaymentModal contract={payContract} ledger={ledger} onClose={() => setPayContract(null)} onPay={handlePay} />
       )}
 
       {/* Edit Contract Modal */}

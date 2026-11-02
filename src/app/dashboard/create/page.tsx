@@ -244,6 +244,9 @@ export default function CreateContractPage() {
     setNewClientPhotos([]);
   };
 
+  // Not contracts.length + 1: after a delete that repeats a number still in use
+  const nextContractNumber = contracts.reduce((max, c) => Math.max(max, c.number), 0) + 1;
+
   const [submitting, setSubmitting] = useState(false);
   const handleSubmit = async () => {
     if (submitting) return;
@@ -286,7 +289,7 @@ export default function CreateContractPage() {
     const finalDebt = effectiveAfterFirst;
     const newContract = {
       id: Date.now().toString(),
-      number: contracts.length + 1,
+      number: nextContractNumber,
       createdAt: startDate,
       endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
       clientId: clientToUse.id,
@@ -335,7 +338,7 @@ export default function CreateContractPage() {
   };
 
   const buildDraft = () => ({
-    id: 'draft', number: contracts.length + 1, createdAt: startDate,
+    id: 'draft', number: nextContractNumber, createdAt: startDate,
     endDate: paymentSchedule[paymentSchedule.length - 1]?.date ?? startDate,
     clientId: selectedClient?.id ?? '', clientName: selectedClient ? `${selectedClient.lastName} ${selectedClient.firstName} ${selectedClient.middleName}`.trim() : '',
     product: productName || '', phone: selectedClient?.phone ?? '', status: 'В процессе' as const,

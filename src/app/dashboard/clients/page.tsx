@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import { Client, Contract } from '@/lib/types';
 import { Trash2, Camera, X, ZoomIn, ChevronLeft, ChevronRight, Upload, Pencil, User, FileText, CreditCard, FileSpreadsheet } from 'lucide-react';
+import { EXTRA_PAYMENT_LABEL, getInstallments, isContractLedgerEntry, ledgerContractNumber } from '@/lib/installments';
+import InstallmentSelect from '@/components/InstallmentSelect';
 
 // ── Passport hover preview ──────────────────────────────────────────────────
 function PassportPreview({ photos, anchorRef }: { photos: string[]; anchorRef: React.RefObject<HTMLSpanElement | null> }) {
@@ -59,13 +61,15 @@ interface PaymentRow {
   amount: number;
   operation: string;
   note: string;
+  clientContract?: string;
   paidForMonth?: string;
   paymentComment?: string;
 }
 
-function EditPaymentDialog({ payment, contract, onClose, onSave }: {
+function EditPaymentDialog({ payment, contract, ledger, onClose, onSave }: {
   payment: PaymentRow;
   contract?: Contract;
+  ledger: PaymentRow[];
   onClose: () => void;
   onSave: (updates: { date: string; paidForMonth?: string; paymentComment?: string }, newAmount: number) => void;
 }) {
@@ -74,32 +78,16 @@ function EditPaymentDialog({ payment, contract, onClose, onSave }: {
   const [paidForMonth, setPaidForMonth] = useState(payment.paidForMonth ?? '');
   const [paymentComment, setPaymentComment] = useState(payment.paymentComment ?? '');
 
-  // Build the same month options as PaymentModal
-  const monthOptions = useMemo(() => {
-    if (!contract) return [{ key: 'внеочередно', label: 'Внеочередной платёж' }];
-    const parseStartDate = (s: string): Date => {
-      const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-      if (!m) return new Date();
-      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-    };
-    const base = parseStartDate(contract.startDate || contract.createdAt);
-    const payDay = contract.payDay || 1;
-    const total = contract.effectiveMonths || contract.months || 1;
-    const items: { key: string; label: string }[] = [];
-    for (let i = 0; i < total; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() + i + 1, payDay);
-      items.push({
-        key: String(i + 1),
-        label: `${i + 1}-й (${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })})`,
-      });
-    }
-    items.push({ key: 'внеочередно', label: 'Внеочередной платёж' });
-    // If current paidForMonth doesn't match any option, keep it as an extra choice
-    if (paidForMonth && !items.some(i => i.label === paidForMonth)) {
-      items.push({ key: 'custom', label: paidForMonth });
+  const installments = useMemo(() => (contract ? getInstallments(contract, ledger) : []), [contract, ledger]);
+
+  // Same months as PaymentModal; a saved month that is no longer on the schedule stays as an extra choice
+  const extraOptions = useMemo(() => {
+    const items = ['', EXTRA_PAYMENT_LABEL];
+    if (paidForMonth && !items.includes(paidForMonth) && !installments.some(i => i.label === paidForMonth)) {
+      items.push(paidForMonth);
     }
     return items;
-  }, [contract, paidForMonth]);
+  }, [installments, paidForMonth]);
 
   const amountNum = parseFloat(amount) || 0;
   const canSave = amountNum > 0 && !!date.match(/^\d{2}\.\d{2}\.\d{4}/);
@@ -132,16 +120,14 @@ function EditPaymentDialog({ payment, contract, onClose, onSave }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">За месяц</label>
-              <select
+              <InstallmentSelect
+                installments={installments}
                 value={paidForMonth}
-                onChange={e => setPaidForMonth(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#5B5BD6] bg-white"
-              >
-                <option value="">—</option>
-                {monthOptions.map(m => (
-                  <option key={m.key} value={m.label}>{m.label}</option>
-                ))}
-              </select>
+                monthlyPayment={contract?.monthlyPayment ?? 0}
+                onChange={setPaidForMonth}
+                allowPaid
+                extraOptions={extraOptions}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Дата</label>
@@ -211,13 +197,8 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
   const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
   const [deletingPayment, setDeletingPayment] = useState<PaymentRow | null>(null);
 
-  // Extract "#N" from note or clientContract to find the linked contract
-  const findContractForPayment = (p: PaymentRow): Contract | undefined => {
-    const match = p.note?.match(/#(\d+)/);
-    if (!match) return undefined;
-    const number = parseInt(match[1], 10);
-    return clientContracts.find(c => c.number === number);
-  };
+  const findContractForPayment = (p: PaymentRow): Contract | undefined =>
+    clientContracts.find(c => isContractLedgerEntry(p, c));
 
   useEffect(() => {
     fetch(`/api/upload?clientId=${encodeURIComponent(client.id)}`)
@@ -232,9 +213,12 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
   const totalPaid = clientContracts.reduce((s, c) => s + (c.cost + c.markup - c.remainingDebt), 0);
 
   // Get payment entries from ledger for this client
-  const clientPayments = ledger.filter(e =>
-    e.operation === 'Платёж клиента' && (e.note?.includes(fullName) || e.note?.includes(client.phone) || clientContracts.some(c => e.note?.includes(`#${c.number}`)))
-  );
+  const clientPayments = ledger.filter(e => {
+    if (e.operation !== 'Платёж клиента') return false;
+    if (ledgerContractNumber(e) !== null) return clientContracts.some(c => isContractLedgerEntry(e, c));
+    // A row without a contract number can only be matched by the client's name
+    return !!e.note?.includes(fullName);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -459,6 +443,7 @@ function ClientProfileModal({ client, contracts, ledger, onClose, onEditContract
           <EditPaymentDialog
             payment={editingPayment}
             contract={findContractForPayment(editingPayment)}
+            ledger={ledger}
             onClose={() => setEditingPayment(null)}
             onSave={(updates, newAmount) => {
               const oldAmount = editingPayment.amount;
